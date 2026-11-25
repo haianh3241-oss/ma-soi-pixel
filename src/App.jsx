@@ -387,12 +387,12 @@ export default function App() {
             onInteract={(targetId, itemId) => socket?.emit('room:interact', { targetId, itemId })}
           />
 
-          {/* TOP-LEFT: My Role + Role Deck Overview */}
-          <div className="absolute top-2 left-2 z-40 flex items-center gap-1.5">
+          {/* TOP-LEFT: Glossy Blue Role Card + Role Deck Overview */}
+          <div className="absolute top-2.5 left-2.5 z-40 flex items-center gap-1.5">
             <button
               type="button"
               onClick={() => setRoleOpen((o) => !o)}
-              className="ggd-btn bg-[#1f2542]/95 px-2.5 py-1.5 text-xs text-amber-300"
+              className="sc-btn-blue px-2.5 py-2 text-xs"
               title="Xem vai trò của bạn"
             >
               <span className="text-base leading-none">{myRoleDef?.icon || '👁️'}</span>
@@ -401,7 +401,7 @@ export default function App() {
             <button
               type="button"
               onClick={() => setDeckOpen(true)}
-              className="ggd-btn bg-[#1f2542]/95 px-2.5 py-1.5 text-xs text-sky-300"
+              className="ggd-btn bg-[#1f274a]/95 px-2.5 py-2 text-xs text-sky-300"
               title="Xem ván này có những role gì"
             >
               <ClipboardList className="w-4 h-4" />
@@ -457,33 +457,33 @@ export default function App() {
             </button>
           </div>
 
-          {/* RIGHT SIDE: Floating Mic + Throw Bag */}
+          {/* RIGHT SIDE: Supercell Double-Ring Mic + Throw Bag */}
           <div className="absolute right-2.5 top-1/2 -translate-y-1/2 z-40 flex flex-col items-end gap-2.5">
             <button
               type="button"
               onClick={voiceChat.toggleMic}
               disabled={!voicePerms?.canSpeak && voiceChat.micPermission === 'granted'}
-              className={`ggd-btn w-12 h-12 rounded-full flex items-center justify-center shadow-xl ${
+              className={`sc-btn-mic w-14 h-14 shadow-xl ${
                 voiceChat.micEnabled
                   ? voicePerms?.channel === 'wolf'
-                    ? 'bg-red-600 text-white'
+                    ? 'bg-gradient-to-b from-red-500 to-red-700 text-white'
                     : voicePerms?.channel === 'dead'
-                      ? 'bg-purple-500 text-white'
-                      : 'bg-emerald-400 text-black'
+                      ? 'bg-gradient-to-b from-purple-400 to-purple-700 text-white'
+                      : 'bg-gradient-to-b from-emerald-400 to-green-600 text-white'
                   : !voicePerms?.canSpeak && voiceChat.userMicWanted
                     ? 'bg-slate-700 text-slate-300'
-                    : 'bg-[#1f2542] text-rose-300'
+                    : 'bg-gradient-to-b from-[#2a3357] to-[#171c34] text-rose-300'
               }`}
               title={voicePerms?.label || 'Bật/Tắt Mic'}
             >
-              {voiceChat.micEnabled ? <Mic className="w-5 h-5" /> : <MicOff className="w-5 h-5" />}
+              {voiceChat.micEnabled ? <Mic className="w-6 h-6 drop-shadow" /> : <MicOff className="w-6 h-6" />}
             </button>
 
             <button
               type="button"
               onClick={() => setBagOpen((b) => !b)}
               className={`ggd-btn w-11 h-11 rounded-full shadow-lg ${
-                bagOpen || selectedThrow ? 'bg-amber-400 text-black' : 'bg-[#1f2542] text-amber-300'
+                bagOpen || selectedThrow ? 'bg-amber-400 text-black' : 'bg-[#1f274a] text-amber-300'
               }`}
               title="Túi đồ ném & biểu cảm"
             >
@@ -517,21 +517,22 @@ export default function App() {
             </div>
           )}
 
-          {/* BOTTOM: Toggle Chat Button & Slide-Up Chat Drawer */}
+          {/* BOTTOM-LEFT: Glossy Blue Chat Button & Slide-Up Chat Drawer */}
           {!chatOpen && inGame && (
-            <div className="absolute bottom-2.5 left-1/2 -translate-x-1/2 z-40">
+            <div className="absolute bottom-3 left-3 z-40">
               <button
                 type="button"
                 onClick={() => {
                   setChatOpen(true);
                   setUnreadCount(0);
                 }}
-                className="ggd-btn bg-[#1f2542]/95 px-4 py-2 text-xs text-amber-300"
+                className="sc-btn-blue px-3.5 py-2.5 text-xs"
+                title="Mở Khung Chat"
               >
-                <MessageSquare className="w-4 h-4" />
-                <span>Mở Chat</span>
+                <MessageSquare className="w-5 h-5" />
+                <span className="hidden sm:inline">Mở Chat</span>
                 {unreadCount > 0 && (
-                  <span className="ml-1 rounded-full bg-rose-600 px-1.5 text-[10px] text-white">
+                  <span className="ml-1 rounded-full bg-rose-600 border border-black px-1.5 text-[10px] text-white">
                     {unreadCount}
                   </span>
                 )}

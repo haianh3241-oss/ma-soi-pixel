@@ -1,16 +1,23 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Tag, Clock, FastForward } from 'lucide-react';
+import { Tag } from 'lucide-react';
 import { INTERACTIONS, PHASES, SUSPECT_TAGS } from '../../shared/constants.js';
 import PixelVillager from './PixelVillager.jsx';
 import { formatCountdown, isWolfRole } from '../utils/helpers.js';
 import { sfx } from '../audio/sfx.js';
 
-function Campfire25D({ isNight }) {
+function formatClock(sec) {
+  const s = Math.max(0, sec);
+  const mm = String(Math.floor(s / 60)).padStart(2, '0');
+  const ss = String(s % 60).padStart(2, '0');
+  return `${mm}:${ss}`;
+}
+
+function CampfireCenter({ isNight }) {
   return (
     <div className="relative flex flex-col items-center justify-center select-none pointer-events-none">
       {isNight && (
         <div
-          className="absolute w-48 h-36 sm:w-64 sm:h-48 rounded-full"
+          className="absolute w-52 h-36 sm:w-72 sm:h-48 rounded-full"
           style={{
             background: 'radial-gradient(ellipse, rgba(251,146,60,0.45) 0%, rgba(251,146,60,0) 72%)',
           }}
@@ -18,47 +25,26 @@ function Campfire25D({ isNight }) {
       )}
 
       {!isNight && (
-        <div className="absolute -top-6 flex gap-1.5">
-          <span className="anim-smoke inline-block w-2.5 h-2.5 rounded-full bg-slate-200/70" />
-          <span className="anim-smoke inline-block w-3 h-3 rounded-full bg-slate-100/60" style={{ animationDelay: '0.6s' }} />
+        <div className="absolute -top-6 flex gap-2 z-20">
+          <span className="anim-smoke inline-block w-3 h-3 rounded-full bg-slate-200/75" />
+          <span className="anim-smoke inline-block w-3.5 h-3.5 rounded-full bg-white/65" style={{ animationDelay: '0.6s' }} />
         </div>
       )}
 
-      <svg
-        viewBox="0 0 80 68"
-        width={84}
-        height={72}
-        className={`w-16 h-14 sm:w-22 sm:h-20 ${isNight ? 'anim-fire' : ''}`}
-      >
-        {/* Ground shadow */}
-        <ellipse cx="40" cy="54" rx="28" ry="9" fill="#000" opacity="0.3" />
-        {/* Stone ring */}
-        <ellipse cx="20" cy="52" rx="6" ry="4" fill="#64748b" stroke="#111322" strokeWidth="2.5" />
-        <ellipse cx="32" cy="56" rx="7" ry="4.5" fill="#475569" stroke="#111322" strokeWidth="2.5" />
-        <ellipse cx="48" cy="56" rx="7" ry="4.5" fill="#64748b" stroke="#111322" strokeWidth="2.5" />
-        <ellipse cx="60" cy="52" rx="6" ry="4" fill="#475569" stroke="#111322" strokeWidth="2.5" />
-        {/* Crossed wooden logs */}
-        <rect x="20" y="42" width="40" height="9" rx="4" transform="rotate(-12 40 46)" fill={isNight ? '#92400e' : '#3f3f46'} stroke="#111322" strokeWidth="2.5" />
-        <rect x="20" y="42" width="40" height="9" rx="4" transform="rotate(12 40 46)" fill={isNight ? '#78350f' : '#27272a'} stroke="#111322" strokeWidth="2.5" />
-
-        {isNight ? (
-          <g>
-            <path
-              d="M40 8 C54 24 58 38 40 46 C22 38 26 24 40 8 Z"
-              fill="#f97316"
-              stroke="#111322"
-              strokeWidth="2.5"
-            />
-            <path
-              d="M40 16 C48 27 50 38 40 44 C30 38 32 27 40 16 Z"
-              fill="#facc15"
-            />
-            <path d="M40 24 C44 31 45 38 40 42 C35 38 36 31 40 24 Z" fill="#fef08a" />
-          </g>
-        ) : (
-          <ellipse cx="40" cy="45" rx="10" ry="3.5" fill="#52525b" stroke="#111322" strokeWidth="2" />
-        )}
-      </svg>
+      <img
+        src="/assets/chars/campfire_lit.png"
+        alt="Đống lửa trại"
+        draggable={false}
+        className={`w-16 h-16 sm:w-24 sm:h-24 object-contain ${isNight ? 'anim-fire' : ''}`}
+        style={
+          isNight
+            ? undefined
+            : {
+                filter: 'brightness(0.42) saturate(0.15) contrast(1.15)',
+                opacity: 0.85,
+              }
+        }
+      />
     </div>
   );
 }
@@ -269,13 +255,13 @@ export default function VillageArena({
     return null;
   };
 
-  // 2.5D Oblique Ellipse Layout with safe margins for right Mic/Bag & bottom Skip/Chat bars
+  // Safe ellipse aligned to the painted cobblestone plaza with padding for HUD corners
   const count = activePlayers.length;
-  const compact = size.w < 600 || size.h < 520;
-  const baseSprite = compact ? 44 : size.w > 950 ? 62 : 52;
-  const rx = Math.max(105, Math.min(size.w * 0.34, size.w / 2 - 74));
-  const ry = Math.max(76, Math.min(size.h * 0.24, size.h / 2 - 102));
-  const centerYOffset = size.h * 0.01;
+  const compact = size.w < 640 || size.h < 540;
+  const baseSprite = compact ? 54 : size.w > 980 ? 84 : 68;
+  const rx = Math.max(105, Math.min(size.w * 0.31, size.w / 2 - 82));
+  const ry = Math.max(76, Math.min(size.h * 0.24, size.h / 2 - 108));
+  const centerYOffset = size.h * 0.04;
 
   const myDayVote = me ? room.publicDayVotes?.[me.id]?.targetId : null;
   const myVerdictVote = me ? room.publicVerdictVotes?.[me.id]?.choice : null;
@@ -286,102 +272,38 @@ export default function VillageArena({
     <div
       ref={containerRef}
       onClick={() => setTagPickerFor(null)}
-      className="relative w-full h-full overflow-hidden select-none"
+      className="relative w-full h-full overflow-hidden select-none bg-[#0d1224]"
     >
-      {/* LAYER 1: SKY & CELESTIAL (Bright Blue Sky + Sun vs Deep Night + Moon) */}
+      {/* LAYER 1: Full-Bleed Crossfading Painted 2.5D Day & Night Backgrounds */}
       <div
-        className="pointer-events-none absolute inset-0 transition-colors duration-1000"
+        className="pointer-events-none absolute inset-0 bg-cover bg-center transition-opacity duration-1000"
         style={{
-          background: isNight
-            ? 'linear-gradient(180deg, #070b1e 0%, #151c42 38%, #18233a 100%)'
-            : 'linear-gradient(180deg, #38bdf8 0%, #93c5fd 30%, #65a30d 34%, #4d7c0f 100%)',
+          backgroundImage: "url('/assets/bg_day.jpg')",
+          opacity: isNight ? 0 : 1,
         }}
-      >
-        {isNight ? (
-          <>
-            {/* Bright Full Moon */}
-            <div className="absolute top-6 right-[12%] w-14 h-14 sm:w-18 sm:h-18 rounded-full bg-amber-100 shadow-[0_0_40px_rgba(254,243,199,0.75)] border-4 border-amber-200/60" />
-            {/* Twinkling Stars */}
-            <div className="absolute top-5 left-[12%] w-1.5 h-1.5 rounded-full bg-white opacity-80" />
-            <div className="absolute top-12 left-[28%] w-1 h-1 rounded-full bg-amber-100 opacity-75" />
-            <div className="absolute top-7 left-[56%] w-1.5 h-1.5 rounded-full bg-sky-100 opacity-70" />
-            <div className="absolute top-14 left-[75%] w-1 h-1 rounded-full bg-white opacity-60" />
-          </>
-        ) : (
-          <>
-            {/* Golden Sun + Clouds */}
-            <div className="absolute top-4 right-[12%] w-14 h-14 sm:w-18 sm:h-18 rounded-full bg-yellow-300 shadow-[0_0_50px_rgba(253,224,71,0.95)] border-4 border-amber-200" />
-            <div className="absolute top-7 left-[14%] w-20 h-7 rounded-full bg-white/85 shadow-sm" />
-            <div className="absolute top-11 left-[44%] w-24 h-8 rounded-full bg-white/80 shadow-sm" />
-          </>
-        )}
+      />
+      <div
+        className="pointer-events-none absolute inset-0 bg-cover bg-center transition-opacity duration-1000"
+        style={{
+          backgroundImage: "url('/assets/bg_night.jpg')",
+          opacity: isNight ? 1 : 0,
+        }}
+      />
 
-        {/* LAYER 2: Distant Cartoon Village Backdrop (Hills, Trees, Cottages) */}
-        <svg
-          viewBox="0 0 1200 260"
-          preserveAspectRatio="none"
-          className="absolute top-[16%] left-0 w-full h-[26%] transition-all duration-1000"
-        >
-          {/* Rolling Hills */}
-          <path
-            d="M0 180 Q300 90 600 165 T1200 150 L1200 260 L0 260 Z"
-            fill={isNight ? '#1e293b' : '#4d7c0f'}
-            stroke="#111322"
-            strokeWidth="4"
-          />
-          {/* Left Cartoon Cottage */}
-          <g transform="translate(110, 75)">
-            <rect x="10" y="45" width="75" height="55" rx="4" fill={isNight ? '#334155' : '#fef3c7'} stroke="#111322" strokeWidth="4" />
-            <path d="M0 50 L48 12 L96 50 Z" fill={isNight ? '#7f1d1d' : '#ef4444'} stroke="#111322" strokeWidth="4" />
-            <rect x="35" y="65" width="22" height="35" rx="3" fill="#78350f" stroke="#111322" strokeWidth="3" />
-            <rect x="62" y="60" width="14" height="14" rx="2" fill={isNight ? '#fde047' : '#38bdf8'} stroke="#111322" strokeWidth="3" />
-          </g>
-          {/* Right Cartoon Cottage */}
-          <g transform="translate(960, 68)">
-            <rect x="10" y="45" width="80" height="58" rx="4" fill={isNight ? '#334155' : '#fde68a'} stroke="#111322" strokeWidth="4" />
-            <path d="M0 50 L50 10 L100 50 Z" fill={isNight ? '#1e3a8a' : '#3b82f6'} stroke="#111322" strokeWidth="4" />
-            <rect x="42" y="68" width="22" height="35" rx="3" fill="#78350f" stroke="#111322" strokeWidth="3" />
-            <rect x="20" y="58" width="14" height="14" rx="2" fill={isNight ? '#fde047' : '#7dd3fc'} stroke="#111322" strokeWidth="3" />
-          </g>
-          {/* Cartoon Trees */}
-          {[260, 440, 760, 880].map((tx, i) => (
-            <g key={i} transform={`translate(${tx}, ${88 + (i % 2) * 14})`}>
-              <rect x="18" y="48" width="12" height="36" fill="#78350f" stroke="#111322" strokeWidth="3" />
-              <circle cx="24" cy="36" r="24" fill={isNight ? '#14532d' : '#22c55e'} stroke="#111322" strokeWidth="3.5" />
-            </g>
-          ))}
-        </svg>
-
-        {/* LAYER 3: 2.5D Oblique Grass & Cobblestone Courtyard */}
-        <div
-          className="absolute inset-x-0 bottom-0 h-[68%] transition-colors duration-1000"
-          style={{
-            background: isNight
-              ? 'radial-gradient(ellipse at 50% 45%, #1d2d2a 0%, #101926 70%, #090d16 100%)'
-              : 'radial-gradient(ellipse at 50% 45%, #84cc16 0%, #4d7c0f 65%, #365314 100%)',
-            borderTop: '4px solid #111322',
-          }}
-        />
-        <div
-          className="absolute left-1/2 rounded-full border-4 border-[#111322]/70 transition-colors duration-1000"
-          style={{
-            top: `calc(50% + ${centerYOffset}px)`,
-            transform: 'translate(-50%, -50%)',
-            width: rx * 2.15,
-            height: ry * 2.1,
-            background: isNight
-              ? 'radial-gradient(ellipse, #334155 0%, #1e293b 78%)'
-              : 'radial-gradient(ellipse, #e7e5e4 0%, #a8a29e 82%)',
-            boxShadow: 'inset 0 8px 0 rgba(255,255,255,0.18), 0 8px 0 rgba(0,0,0,0.35)',
-          }}
-        />
-      </div>
-
-      {/* Top-Center Phase & Timer Pill */}
-      <div className="absolute top-2 left-1/2 -translate-x-1/2 z-30 flex flex-col items-center gap-1 max-w-[92vw]">
-        <div className="ggd-card px-3.5 py-1.5 flex items-center gap-2 text-xs">
-          <span className="text-base leading-none">{isNight ? '🌙' : '☀️'}</span>
-          <span className="font-brand text-amber-300 text-xs sm:text-sm whitespace-nowrap">
+      {/* Top-Center Supercell Timer Capsule */}
+      <div className="absolute top-2.5 left-1/2 -translate-x-1/2 z-30 flex flex-col items-center gap-1.5 max-w-[92vw]">
+        <div className="sc-timer-pill px-4 py-1.5 flex items-center gap-2.5">
+          <span className="text-lg leading-none">{isNight ? '🌙' : '☀️'}</span>
+          {room.phaseEndsAt && (
+            <span
+              className={`font-black text-base sm:text-xl tracking-wider leading-none ${
+                secondsLeft <= 5 ? 'text-red-400 animate-pulse' : 'text-white'
+              }`}
+            >
+              {formatClock(secondsLeft)}
+            </span>
+          )}
+          <span className="text-[11px] font-extrabold uppercase text-amber-300 border-l border-white/20 pl-2 whitespace-nowrap">
             {room.phase === PHASES.ROLE_REVEAL && 'CHIA BÀI'}
             {room.phase === PHASES.NIGHT && `ĐÊM ${room.dayCount}`}
             {room.phase === PHASES.DAWN && `BÌNH MINH ${room.dayCount}`}
@@ -390,20 +312,10 @@ export default function VillageArena({
             {room.phase === PHASES.DAY_DEFENSE && 'TRĂN TRỐI'}
             {room.phase === PHASES.DAY_VERDICT && 'PHÁN QUYẾT'}
           </span>
-          {room.phaseEndsAt && (
-            <span
-              className={`flex items-center gap-1 font-extrabold text-sm leading-none px-2 py-0.5 rounded-lg ${
-                secondsLeft <= 5 ? 'bg-red-600 text-white animate-pulse' : 'bg-black/45 text-amber-300'
-              }`}
-            >
-              <Clock className="w-3.5 h-3.5" />
-              {secondsLeft}s
-            </span>
-          )}
         </div>
 
         {selectedThrow && (
-          <div className="rounded-full bg-sky-400 text-black border-2 border-[#111322] px-3 py-0.5 text-xs font-extrabold shadow flex items-center gap-2">
+          <div className="rounded-full bg-sky-400 text-black border-2 border-[#0b0d17] px-3 py-0.5 text-xs font-extrabold shadow flex items-center gap-2">
             <span>🎯 Bấm 🎯 dưới chân người muốn ném</span>
             <button type="button" onClick={onClearThrow} className="underline cursor-pointer">
               Hủy
@@ -412,14 +324,14 @@ export default function VillageArena({
         )}
       </div>
 
-      {/* LAYER 4 (Center Campfire at Z = 50) */}
+      {/* Center Campfire (Z = 50) */}
       <div
         className="absolute left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center"
         style={{ top: `calc(50% + ${centerYOffset}px)`, zIndex: 50 }}
       >
-        <Campfire25D isNight={isNight} />
+        <CampfireCenter isNight={isNight} />
         {room.phase === PHASES.DAY_DEFENSE && accusedPlayer && (
-          <div className="mt-1 px-2.5 py-0.5 rounded-full bg-red-600 border-2 border-[#111322] text-[11px] font-extrabold text-white whitespace-nowrap animate-pulse">
+          <div className="mt-1 px-3 py-0.5 rounded-full bg-red-600 border-2 border-[#090b14] text-[11px] font-extrabold text-white whitespace-nowrap animate-pulse shadow">
             🎙️ {accusedPlayer.name} trăn trối
           </div>
         )}
@@ -427,7 +339,7 @@ export default function VillageArena({
 
       {/* Dawn Death Banner */}
       {room.phase === PHASES.DAWN && (
-        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-40 ggd-card px-4 py-2.5 text-center max-w-xs sm:max-w-md">
+        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-[110] ggd-card px-4 py-2.5 text-center max-w-xs sm:max-w-md">
           <div className="text-xs sm:text-sm font-extrabold text-amber-200">
             {room.pendingDeaths.length === 0
               ? '🕊️ Đêm qua bình yên!'
@@ -436,7 +348,7 @@ export default function VillageArena({
           {room.pendingDeaths
             .filter((d) => d.will)
             .map((d) => (
-              <div key={d.playerId} className="mt-1 text-xs text-slate-200 bg-black/40 rounded-lg px-2.5 py-1">
+              <div key={d.playerId} className="mt-1 text-xs text-slate-200 bg-black/45 rounded-lg px-2.5 py-1">
                 📜 {d.name}: “{d.will}”
               </div>
             ))}
@@ -468,7 +380,7 @@ export default function VillageArena({
         })}
       </div>
 
-      {/* LAYER 4 (Y-Sorted Villagers around the Campfire) */}
+      {/* Y-Sorted Illustrated Villagers around the Plaza */}
       {activePlayers.map((p, idx) => {
         const angle = (idx / Math.max(1, count)) * Math.PI * 2 - Math.PI / 2;
         const isAccused =
@@ -479,10 +391,9 @@ export default function VillageArena({
         const x = Math.cos(angle) * rx * rScale;
         const y = Math.sin(angle) * ry * rScale;
 
-        // 2.5D Depth perspective: back row smaller (0.9x, z<50), front row larger (1.08x, z>50)
-        const depthNorm = (y / ry + 1) / 2; // 0 (top/back) -> 1 (bottom/front)
-        const depthScale = isAccused ? 1.12 : 0.9 + depthNorm * 0.18;
-        const zOrder = isAccused ? 85 : 30 + Math.round(depthNorm * 40); // campfire is 50!
+        const depthNorm = (y / ry + 1) / 2;
+        const depthScale = isAccused ? 1.12 : 0.9 + depthNorm * 0.16;
+        const zOrder = isAccused ? 85 : 30 + Math.round(depthNorm * 40);
 
         const isMe = p.id === me?.id;
         const isSpeaking = Boolean(speakingPeers[p.id]);
@@ -509,7 +420,7 @@ export default function VillageArena({
             {bubble && (
               <div
                 key={bubble.id}
-                className="anim-chat-bubble pointer-events-none absolute -top-9 left-1/2 z-40 max-w-[150px] rounded-xl bg-white text-black px-2.5 py-0.5 text-[11px] font-extrabold shadow-lg border-2 border-[#111322] truncate"
+                className="anim-chat-bubble pointer-events-none absolute -top-9 left-1/2 z-40 max-w-[150px] rounded-xl bg-white text-black px-2.5 py-0.5 text-[11px] font-extrabold shadow-lg border-2 border-[#0b0d17] truncate"
               >
                 {bubble.text}
               </div>
@@ -551,7 +462,7 @@ export default function VillageArena({
                   e.stopPropagation();
                   setTagPickerFor((cur) => (cur === p.id ? null : p.id));
                 }}
-                className="absolute -top-1 -right-2 w-5 h-5 rounded-full bg-[#16192b]/85 hover:bg-black border border-white/25 text-slate-200 flex items-center justify-center z-20 cursor-pointer"
+                className="absolute -bottom-0.5 -right-1 w-5 h-5 rounded-full bg-[#111528]/90 hover:bg-black border border-white/30 text-slate-200 flex items-center justify-center z-20 cursor-pointer"
                 title="Gắn nhãn nghi ngờ"
               >
                 <Tag className="w-2.5 h-2.5" />
@@ -560,7 +471,7 @@ export default function VillageArena({
               {tagPickerFor === p.id && (
                 <div
                   onClick={(e) => e.stopPropagation()}
-                  className="absolute top-5 left-7 z-50 ggd-card p-1.5 w-32 flex flex-col gap-0.5"
+                  className="absolute top-4 left-7 z-50 ggd-card p-1.5 w-32 flex flex-col gap-0.5"
                 >
                   {SUSPECT_TAGS.map((t) => (
                     <button
@@ -594,14 +505,14 @@ export default function VillageArena({
 
             <div className="flex items-center gap-1 mt-0.5">
               <span
-                className={`px-2 py-0.5 rounded-full text-[10.5px] font-extrabold bg-[#111322]/85 border border-white/15 max-w-[88px] truncate ${
-                  isMe ? 'text-amber-300 border-amber-400/60' : !p.alive ? 'text-slate-400 line-through' : 'text-white'
+                className={`sc-nameplate px-2.5 py-0.5 text-[10.5px] font-extrabold max-w-[92px] truncate ${
+                  isMe ? 'text-amber-300 border-amber-400/70' : !p.alive ? 'text-slate-400 line-through' : 'text-white'
                 }`}
               >
                 {p.name}
               </span>
               {voteCount > 0 && (room.phase === PHASES.DAY_DISCUSS || room.phase === PHASES.DAY_DEFENSE) && (
-                <span className="rounded-full bg-rose-600 px-1.5 py-0.5 text-[10px] font-black text-white border border-[#111322]">
+                <span className="rounded-full bg-rose-600 px-1.5 py-0.5 text-[10px] font-black text-white border-2 border-[#090b14]">
                   {voteCount}
                 </span>
               )}
@@ -609,7 +520,7 @@ export default function VillageArena({
 
             {tagDef && (
               <span
-                className="mt-0.5 px-1.5 py-0.2 rounded-full text-[9.5px] font-extrabold bg-[#111322]/90 border border-black"
+                className="mt-0.5 px-1.5 py-0.2 rounded-full text-[9.5px] font-extrabold bg-[#0f1322]/95 border border-black"
                 style={{ color: tagDef.color }}
               >
                 {tagDef.icon} {tagDef.label}
@@ -632,34 +543,31 @@ export default function VillageArena({
         );
       })}
 
-      {/* LAYER 5: Soft Foreground Bushes */}
-      <div className="pointer-events-none absolute -bottom-4 -left-6 w-36 h-20 rounded-full bg-emerald-950/75 border-4 border-[#111322] z-[90]" />
-      <div className="pointer-events-none absolute -bottom-4 -right-6 w-36 h-20 rounded-full bg-emerald-950/75 border-4 border-[#111322] z-[90]" />
+      {/* Bottom-Right Glossy Orange SKIP Button (Supercell style!) */}
+      {canSkipNow && (
+        <button
+          type="button"
+          onClick={onToggleSkip}
+          className={`sc-btn-orange absolute bottom-3 right-3 z-[100] px-4 py-2 text-xs sm:text-sm ${
+            iSkipped ? 'ring-3 ring-emerald-300 brightness-110' : ''
+          }`}
+        >
+          <span>{isNight ? 'QUA ĐÊM' : 'SKIP'}</span>
+          <span className="rounded-full bg-black/35 px-1.5 py-0.2 text-[10px]">
+            {skipVotes.length}/{alivePlayers.length}
+          </span>
+        </button>
+      )}
 
-      {/* Bottom Floating Controls (Skip Day/Night + Verdict + Night Abilities) */}
-      <div className="absolute bottom-14 left-1/2 -translate-x-1/2 z-[100] flex flex-wrap items-center justify-center gap-1.5 max-w-[94vw]">
-        {canSkipNow && (
-          <button
-            type="button"
-            onClick={onToggleSkip}
-            className={`ggd-btn px-3 py-1.5 text-xs ${
-              iSkipped ? 'bg-emerald-400 text-black' : 'bg-[#252b47]/95 text-amber-200'
-            }`}
-          >
-            <FastForward className="w-3.5 h-3.5" />
-            <span>
-              {isNight ? 'Qua đêm' : 'Skip'} ({skipVotes.length}/{alivePlayers.length})
-            </span>
-          </button>
-        )}
-
+      {/* Bottom-Center Context Action Bar (Safe between Chat left & SKIP right) */}
+      <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-[100] flex flex-wrap items-center justify-center gap-1.5 max-w-[60vw]">
         {room.phase === PHASES.DAY_DISCUSS && me?.alive && (
           <>
             <button
               type="button"
               onClick={() => onDayVote('skip')}
-              className={`ggd-btn px-3 py-1.5 text-xs ${
-                myDayVote === 'skip' ? 'bg-amber-400 text-black' : 'bg-[#252b47]/95 text-slate-200'
+              className={`ggd-btn px-2.5 py-1.5 text-xs ${
+                myDayVote === 'skip' ? 'bg-amber-400 text-black' : 'bg-[#1d2542]/95 text-slate-100'
               }`}
             >
               ⏭️ Không treo

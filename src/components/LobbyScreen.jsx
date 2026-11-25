@@ -37,12 +37,17 @@ export function HomeScreen({ onCreateRoom, onJoinRoom, initialCode = '' }) {
   const selectedVillager = VILLAGERS.find((v) => v.id === avatarId) || VILLAGERS[0];
 
   return (
-    <div className="min-h-dvh w-full bg-[radial-gradient(circle_at_top,#2a2142,#100d18_70%)] p-3 md:p-6 flex items-center justify-center">
+    <div
+      className="min-h-dvh w-full bg-cover bg-center bg-fixed p-3 md:p-6 flex items-center justify-center relative"
+      style={{
+        backgroundImage: "linear-gradient(rgba(10,14,28,0.72), rgba(10,14,28,0.82)), url('/assets/bg_night.jpg')",
+      }}
+    >
       <div className="w-full max-w-4xl flex flex-col gap-4 my-auto">
         {/* Header */}
         <div className="text-center flex flex-col items-center gap-1">
-          <div className="inline-flex items-center gap-2 rounded-full bg-amber-400/15 border border-amber-400/40 px-3.5 py-1 text-xs font-extrabold text-amber-300">
-            <span>🐺 GOOSE GOOSE DUCK 2.5D STYLE</span>
+          <div className="inline-flex items-center gap-2 rounded-full bg-amber-400/20 border border-amber-400/50 px-3.5 py-1 text-xs font-extrabold text-amber-300 backdrop-blur-xs">
+            <span>🐺 2D PARTY GAME EDITION</span>
             <span>•</span>
             <span>VOICE CHAT SẢNH CHỜ & TRONG VÁN</span>
           </div>
@@ -231,7 +236,12 @@ export default function LobbyScreen({
   };
 
   return (
-    <div className="flex-1 w-full p-2.5 md:p-4 bg-[radial-gradient(circle_at_top,#241c38,#100d18_75%)]">
+    <div
+      className="flex-1 w-full bg-cover bg-center bg-fixed p-2.5 md:p-4"
+      style={{
+        backgroundImage: "linear-gradient(rgba(10,14,28,0.74), rgba(10,14,28,0.84)), url('/assets/bg_night.jpg')",
+      }}
+    >
       <div className="max-w-6xl mx-auto flex flex-col gap-3 pb-6">
         {/* Top Invite Banner */}
         <div className="px-panel p-3 flex flex-wrap items-center justify-between gap-2">

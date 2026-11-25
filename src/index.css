@@ -1,9 +1,9 @@
 @import "tailwindcss";
 
 :root {
-  --panel-bg: rgba(30, 35, 58, 0.94);
-  --panel-dark: rgba(18, 22, 39, 0.92);
-  --ink: #111322;
+  --panel-bg: rgba(24, 30, 54, 0.94);
+  --panel-dark: rgba(14, 18, 34, 0.92);
+  --ink: #0b0d17;
   --gold: #fbbf24;
   --text: #f8fafc;
 }
@@ -11,7 +11,7 @@
 html,
 body {
   min-height: 100%;
-  background: #121629;
+  background: #0d1224;
   color: var(--text);
   font-family: 'Nunito', 'Be Vietnam Pro', system-ui, sans-serif;
   overflow-x: hidden;
@@ -36,32 +36,35 @@ body {
   font-weight: 900;
 }
 
-/* Goose Goose Duck Smooth Cartoon Cel-Shaded Cards & Buttons */
+/* =========================================================
+   SUPERCELL / WOLVESVILLE GLOSSY 2D UI CLASSES
+   ========================================================= */
+
 .px-panel,
 .ggd-card {
-  background: var(--panel-bg);
+  background: linear-gradient(180deg, rgba(33, 41, 74, 0.96) 0%, rgba(20, 25, 46, 0.96) 100%);
   border: 3px solid var(--ink);
   box-shadow:
-    inset 0 2px 0 rgba(255, 255, 255, 0.14),
-    0 6px 0 rgba(10, 12, 24, 0.55);
-  border-radius: 16px;
+    inset 0 2px 0 rgba(255, 255, 255, 0.16),
+    0 6px 0 rgba(8, 10, 18, 0.65);
+  border-radius: 18px;
 }
 
 .px-panel-dark,
 .ggd-card-dark {
   background: var(--panel-dark);
   border: 2.5px solid var(--ink);
-  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.35);
-  border-radius: 12px;
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.45);
+  border-radius: 14px;
 }
 
 .px-btn,
 .ggd-btn {
   border: 2.5px solid var(--ink);
   box-shadow:
-    inset 0 2px 0 rgba(255, 255, 255, 0.35),
+    inset 0 2.5px 0 rgba(255, 255, 255, 0.35),
     0 4px 0 var(--ink);
-  border-radius: 12px;
+  border-radius: 13px;
   cursor: pointer;
   font-family: 'Be Vietnam Pro', 'Nunito', sans-serif;
   font-weight: 800;
@@ -90,8 +93,100 @@ body {
   cursor: not-allowed;
 }
 
+.sc-timer-pill {
+  background: linear-gradient(180deg, #24305c 0%, #131932 100%);
+  border: 3px solid #090b14;
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, 0.22),
+    0 5px 0 rgba(7, 9, 16, 0.75);
+  border-radius: 999px;
+}
+
+.sc-btn-blue {
+  background: linear-gradient(180deg, #56b6ff 0%, #206ee0 100%);
+  border: 3px solid #090b14;
+  box-shadow:
+    inset 0 3px 0 rgba(255, 255, 255, 0.48),
+    0 4px 0 #090b14;
+  border-radius: 14px;
+  color: #ffffff;
+  text-shadow: 0 2px 0 rgba(9, 11, 20, 0.75);
+  cursor: pointer;
+  font-family: 'Be Vietnam Pro', 'Nunito', sans-serif;
+  font-weight: 900;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: transform 0.08s ease, filter 0.12s ease;
+}
+
+.sc-btn-orange {
+  background: linear-gradient(180deg, #ffbe3b 0%, #eb6b0c 100%);
+  border: 3px solid #090b14;
+  box-shadow:
+    inset 0 3px 0 rgba(255, 255, 255, 0.55),
+    0 5px 0 #090b14;
+  border-radius: 14px;
+  color: #ffffff;
+  text-shadow:
+    -1px -1px 0 #090b14,
+    1px -1px 0 #090b14,
+    -1px 1px 0 #090b14,
+    1px 2px 0 #090b14;
+  cursor: pointer;
+  font-family: 'Be Vietnam Pro', 'Nunito', sans-serif;
+  font-weight: 900;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: transform 0.08s ease, filter 0.12s ease;
+}
+
+.sc-btn-blue:hover:not(:disabled),
+.sc-btn-orange:hover:not(:disabled),
+.sc-btn-mic:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.sc-btn-blue:active:not(:disabled),
+.sc-btn-orange:active:not(:disabled),
+.sc-btn-mic:active:not(:disabled) {
+  transform: translateY(2px);
+}
+
+.sc-btn-mic {
+  border: 3.5px solid #090b14;
+  box-shadow:
+    inset 0 0 0 3px rgba(255, 255, 255, 0.35),
+    0 5px 0 #090b14;
+  border-radius: 999px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.08s ease, filter 0.12s ease;
+}
+
+.sc-nameplate {
+  background: rgba(16, 18, 28, 0.94);
+  border: 2.5px solid #080910;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.6);
+  border-radius: 999px;
+}
+
+.sc-zzz-bubble {
+  background: #ffffff;
+  color: #13182e;
+  border: 2.5px solid #090b14;
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.45);
+  border-radius: 999px;
+  font-weight: 900;
+}
+
 .px-input {
-  background: #0f1324;
+  background: #0e1324;
   color: var(--text);
   border: 2.5px solid #353e63;
   border-radius: 10px;
@@ -119,7 +214,7 @@ body {
 }
 
 /* =========================================================
-   SMOOTH 2D CARTOON ANIMATIONS
+   2D CARTOON ANIMATIONS
    ========================================================= */
 
 @keyframes soulBounce {
@@ -128,13 +223,13 @@ body {
 }
 
 @keyframes sleepNod {
-  0%, 100% { transform: translateY(0) rotate(-2deg); }
-  50% { transform: translateY(2px) rotate(3deg); }
+  0%, 100% { transform: translateY(0) rotate(-1.5deg); }
+  50% { transform: translateY(2px) rotate(2deg); }
 }
 
 @keyframes ghostFloat {
-  0%, 100% { transform: translateY(0); opacity: 0.72; }
-  50% { transform: translateY(-7px); opacity: 0.94; }
+  0%, 100% { transform: translateY(0); opacity: 0.85; }
+  50% { transform: translateY(-7px); opacity: 0.98; }
 }
 
 @keyframes campfireFlicker {
@@ -143,7 +238,7 @@ body {
     filter: drop-shadow(0 0 18px rgba(251, 146, 60, 0.9));
   }
   50% {
-    transform: scale(1.06) translateY(-2px);
+    transform: scale(1.05) translateY(-2px);
     filter: drop-shadow(0 0 28px rgba(250, 204, 21, 1));
   }
 }
@@ -154,36 +249,35 @@ body {
 }
 
 @keyframes zzzFloat {
-  0% { transform: translate(0, 0) scale(0.75); opacity: 0; }
-  30% { opacity: 0.95; }
-  100% { transform: translate(9px, -20px) scale(1.2); opacity: 0; }
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-4px) scale(1.06); }
 }
 
 @keyframes pokeTickle {
   0%, 100% { transform: rotate(0deg) scale(1); }
-  20% { transform: rotate(-12deg) scale(1.12); }
-  40% { transform: rotate(12deg) scale(1.14); }
-  60% { transform: rotate(-10deg) scale(1.1); }
-  80% { transform: rotate(8deg) scale(1.05); }
+  20% { transform: rotate(-10deg) scale(1.1); }
+  40% { transform: rotate(10deg) scale(1.12); }
+  60% { transform: rotate(-8deg) scale(1.08); }
+  80% { transform: rotate(6deg) scale(1.04); }
 }
 
 @keyframes pokeChop {
   0% { transform: translateY(0) rotate(0deg); }
-  25% { transform: translateY(-10px) rotate(-14deg) scale(1.1); }
-  55% { transform: translateY(6px) rotate(10deg) scale(1.06); }
+  25% { transform: translateY(-10px) rotate(-12deg) scale(1.09); }
+  55% { transform: translateY(6px) rotate(8deg) scale(1.05); }
   100% { transform: translateY(0) rotate(0deg); }
 }
 
 @keyframes pokeStagger {
   0%, 100% { transform: translateX(0) rotate(0deg); }
-  25% { transform: translateX(-7px) rotate(-16deg); }
-  55% { transform: translateX(7px) rotate(16deg); }
-  80% { transform: translateX(-3px) rotate(-6deg); }
+  25% { transform: translateX(-7px) rotate(-14deg); }
+  55% { transform: translateX(7px) rotate(14deg); }
+  80% { transform: translateX(-3px) rotate(-5deg); }
 }
 
 @keyframes pokeSpin {
   0% { transform: rotate(0deg) scale(1); }
-  50% { transform: rotate(180deg) scale(1.18); }
+  50% { transform: rotate(180deg) scale(1.15); }
   100% { transform: rotate(360deg) scale(1); }
 }
 
@@ -220,12 +314,12 @@ body {
   100% { transform: translate(var(--to-x), var(--to-y)) scale(1.7) rotate(360deg); opacity: 0; }
 }
 
-.anim-soul-idle { animation: soulBounce 1.1s ease-in-out infinite; }
-.anim-sleep-nod { animation: sleepNod 2.5s ease-in-out infinite; }
-.anim-ghost { animation: ghostFloat 2s ease-in-out infinite; }
+.anim-soul-idle { animation: soulBounce 1.15s ease-in-out infinite; }
+.anim-sleep-nod { animation: sleepNod 2.6s ease-in-out infinite; }
+.anim-ghost { animation: ghostFloat 2.1s ease-in-out infinite; }
 .anim-fire { animation: campfireFlicker 0.6s ease-in-out infinite; }
 .anim-smoke { animation: smokeRise 1.8s ease-out infinite; }
-.anim-zzz { animation: zzzFloat 2.2s ease-out infinite; }
+.anim-zzz { animation: zzzFloat 2s ease-in-out infinite; }
 .anim-poke-tickle { animation: pokeTickle 0.55s ease-in-out; }
 .anim-poke-chop { animation: pokeChop 0.5s ease-out; }
 .anim-poke-stagger { animation: pokeStagger 0.65s ease-in-out; }
@@ -234,9 +328,9 @@ body {
 .anim-chat-bubble { animation: chatBubblePop 4.2s ease-out forwards; }
 
 .speaking-ring {
-  filter: drop-shadow(0 0 8px #4ade80) drop-shadow(0 0 14px rgba(74, 222, 128, 0.9));
+  filter: drop-shadow(0 0 8px #4ade80) drop-shadow(0 0 16px rgba(74, 222, 128, 0.95));
 }
 
 .wolf-eye-glow {
-  filter: drop-shadow(0 0 7px rgba(239, 68, 68, 0.95));
+  filter: drop-shadow(0 0 8px rgba(239, 68, 68, 0.95)) drop-shadow(0 0 16px rgba(239, 68, 68, 0.7));
 }
