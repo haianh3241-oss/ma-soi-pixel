@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Copy, Check, Plus, Trash2, Bot, Play, Sparkles, ScrollText } from 'lucide-react';
+import { Copy, Check, Plus, Trash2, Bot, Play, Sparkles, ScrollText, Mic, MicOff, Send, LogOut } from 'lucide-react';
 import { ROLES, VILLAGERS } from '../../shared/constants.js';
 import PixelVillager from './PixelVillager.jsx';
 
@@ -41,13 +41,13 @@ export function HomeScreen({ onCreateRoom, onJoinRoom, initialCode = '' }) {
       <div className="w-full max-w-4xl flex flex-col gap-4 my-auto">
         {/* Header */}
         <div className="text-center flex flex-col items-center gap-1">
-          <div className="inline-flex items-center gap-2 rounded bg-amber-500/15 border border-amber-400/40 px-3 py-1 text-[11px] font-bold text-amber-300">
-            <span>🔥 SOUL KNIGHT PIXEL EDITION</span>
+          <div className="inline-flex items-center gap-2 rounded-full bg-amber-400/15 border border-amber-400/40 px-3.5 py-1 text-xs font-extrabold text-amber-300">
+            <span>🐺 GOOSE GOOSE DUCK 2.5D STYLE</span>
             <span>•</span>
-            <span>VOICE CHAT NGÀY / ĐÊM</span>
+            <span>VOICE CHAT SẢNH CHỜ & TRONG VÁN</span>
           </div>
-          <h1 className="font-pixel-title text-2xl md:text-4xl text-amber-300 drop-shadow-[0_3px_0_#000] mt-1">
-            MA SÓI PIXEL VILLAGE
+          <h1 className="font-brand text-4xl md:text-5xl text-amber-300 drop-shadow-[0_4px_0_#111322] mt-1">
+            MA CHÓ
           </h1>
           <p className="text-xs md:text-sm text-slate-300">
             11 Vai trò mở rộng • Ẩn role người chết • Ném đồ cà khịa • Chơi ngay không cần tài khoản
@@ -188,6 +188,9 @@ export function HomeScreen({ onCreateRoom, onJoinRoom, initialCode = '' }) {
 export default function LobbyScreen({
   room,
   me,
+  voiceChat,
+  onSendChat,
+  onLeaveRoom,
   onUpdateProfile,
   onUpdateSettings,
   onBalanceRoles,
@@ -197,6 +200,7 @@ export default function LobbyScreen({
 }) {
   const [copied, setCopied] = useState(false);
   const [willDraft, setWillDraft] = useState(me?.will || '');
+  const [chatText, setChatText] = useState('');
   const [startError, setStartError] = useState('');
 
   const isHost = room.hostId === me?.id;
@@ -244,20 +248,39 @@ export default function LobbyScreen({
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <button type="button" onClick={copyLink} className="px-btn bg-sky-500 text-black px-3 py-2 text-xs">
+            <button
+              type="button"
+              onClick={voiceChat?.toggleMic}
+              className={`px-btn px-3 py-2 text-xs ${
+                voiceChat?.micEnabled ? 'bg-emerald-400 text-black' : 'bg-[#2b3354] text-rose-200'
+              }`}
+            >
+              {voiceChat?.micEnabled ? <Mic className="w-4 h-4" /> : <MicOff className="w-4 h-4" />}
+              <span>{voiceChat?.micEnabled ? 'Mic Sảnh: BẬT' : 'Bật Mic Sảnh'}</span>
+            </button>
+            <button type="button" onClick={copyLink} className="px-btn bg-sky-400 text-black px-3 py-2 text-xs">
               {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-              <span>{copied ? 'Đã Copy Link Mời!' : 'Copy Link Mời Bạn'}</span>
+              <span>{copied ? 'Đã Copy Link!' : 'Mời Bạn'}</span>
             </button>
             {isHost && (
               <button
                 type="button"
                 onClick={handleStart}
-                className="px-btn bg-emerald-500 text-black px-4 py-2 text-xs md:text-sm"
+                className="px-btn bg-emerald-400 text-black px-4 py-2 text-xs md:text-sm"
               >
                 <Play className="w-4 h-4" />
-                <span>Bắt Đầu Ván Đấu</span>
+                <span>Bắt Đầu</span>
               </button>
             )}
+            <button
+              type="button"
+              onClick={onLeaveRoom}
+              className="px-btn bg-rose-600 text-white px-3 py-2 text-xs"
+              title="Thoát khỏi phòng"
+            >
+              <LogOut className="w-4 h-4" />
+              <span>Thoát</span>
+            </button>
           </div>
         </div>
 
@@ -287,15 +310,16 @@ export default function LobbyScreen({
                 )}
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-72 overflow-y-auto p-0.5">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-64 overflow-y-auto p-0.5">
                 {room.players.map((p) => {
                   const v = VILLAGERS.find((x) => x.id === p.avatarId) || VILLAGERS[0];
+                  const speaking = Boolean(voiceChat?.speakingPeers?.[p.id]);
                   return (
                     <div
                       key={p.id}
                       className={`px-panel-dark p-2 flex flex-col items-center relative ${
                         p.id === me?.id ? 'border-amber-400' : ''
-                      }`}
+                      } ${speaking ? 'ring-2 ring-emerald-400' : ''}`}
                     >
                       {p.id === room.hostId && (
                         <span className="absolute top-1 left-1 text-[10px]" title="Chủ phòng">
@@ -364,6 +388,43 @@ export default function LobbyScreen({
                   </button>
                 ))}
               </div>
+            </div>
+
+            {/* Lobby Chat Box */}
+            <div className="px-panel p-3 flex flex-col gap-2">
+              <div className="font-brand text-xs text-sky-300">💬 CHAT SẢNH CHỜ</div>
+              <div className="px-panel-dark p-2 h-28 overflow-y-auto flex flex-col gap-1 text-xs">
+                {(room.chat || []).length === 0 ? (
+                  <div className="text-slate-500 text-center mt-6">Nhắn tin hoặc bật Mic để chém gió chờ bạn bè!</div>
+                ) : (
+                  (room.chat || []).map((m) => (
+                    <div key={m.id}>
+                      <b className="text-amber-300">{m.senderName}: </b>
+                      <span className="text-slate-100">{m.text}</span>
+                    </div>
+                  ))
+                )}
+              </div>
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!chatText.trim()) return;
+                  onSendChat?.('village', chatText.trim());
+                  setChatText('');
+                }}
+                className="flex gap-2"
+              >
+                <input
+                  type="text"
+                  value={chatText}
+                  onChange={(e) => setChatText(e.target.value)}
+                  placeholder="Nhắn tin ngoài sảnh chờ..."
+                  className="px-input flex-1 text-xs py-1.5"
+                />
+                <button type="submit" disabled={!chatText.trim()} className="px-btn bg-sky-400 text-black px-3 py-1.5 text-xs">
+                  <Send className="w-3.5 h-3.5" />
+                </button>
+              </form>
             </div>
           </div>
 

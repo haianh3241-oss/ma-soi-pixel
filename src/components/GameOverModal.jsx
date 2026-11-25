@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Trophy, RotateCcw } from 'lucide-react';
+import { Trophy, RotateCcw, LogOut } from 'lucide-react';
 import { ROAST_STICKERS, ROLES } from '../../shared/constants.js';
 import PixelVillager from './PixelVillager.jsx';
 
@@ -8,6 +8,7 @@ export default function GameOverModal({
   me,
   onAddRoastSticker,
   onReturnLobby,
+  onLeaveRoom,
 }) {
   const [selectedSticker, setSelectedSticker] = useState(ROAST_STICKERS[0].id);
   const isHost = room.hostId === me?.id;
@@ -24,16 +25,26 @@ export default function GameOverModal({
           </h2>
           <p className="text-xs md:text-sm text-slate-200">{winner?.reason}</p>
 
-          {isHost && (
+          <div className="flex flex-wrap items-center justify-center gap-2 mt-2">
+            {isHost && (
+              <button
+                type="button"
+                onClick={onReturnLobby}
+                className="px-btn bg-emerald-400 text-black px-5 py-2.5 text-sm"
+              >
+                <RotateCcw className="w-4 h-4" />
+                <span>Chơi Lại Ván Mới</span>
+              </button>
+            )}
             <button
               type="button"
-              onClick={onReturnLobby}
-              className="px-btn mt-2 bg-emerald-500 text-black px-5 py-2.5 text-sm"
+              onClick={onLeaveRoom}
+              className="px-btn bg-rose-600 text-white px-4 py-2.5 text-sm"
             >
-              <RotateCcw className="w-4 h-4" />
-              <span>Chơi Lại Ván Mới (Về Phòng Chờ)</span>
+              <LogOut className="w-4 h-4" />
+              <span>Thoát Phòng</span>
             </button>
-          )}
+          </div>
         </div>
 
         {/* Roast Sticker Slapper Toolbar */}

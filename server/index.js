@@ -238,6 +238,7 @@ function afterHunterShot(room) {
 function enterDayDiscuss(room) {
   room.phase = PHASES.DAY_DISCUSS;
   room.dayVotes = {};
+  room.skipVotes = [];
   room.accusedId = null;
   room.verdictVotes = {};
   room.extensionUsedToday = false;
@@ -263,6 +264,7 @@ function finishDayDiscuss(room) {
 
   room.accusedId = accusedId;
   room.phase = PHASES.DAY_DEFENSE;
+  room.skipVotes = [];
   const accused = room.players.find((p) => p.id === accusedId);
   room.publicLogs.push({
     id: Date.now() + Math.random(),
@@ -271,6 +273,7 @@ function finishDayDiscuss(room) {
     text: `🎙️ ${accused?.name} bị đưa lên bục và có ${room.settings.defenseSeconds} giây trăn trối cuối cùng!`,
   });
   setPhaseTimer(room, room.settings.defenseSeconds * 1000, () => enterDayVerdict(room));
+  scheduleBotActions(room, botHandlers);
   broadcastRoom(room);
 }
 
@@ -492,7 +495,7 @@ io.on('connection', (socket) => {
   socket.on('room:join', ({ code, clientId, name, avatarId, will }, cb) => {
     const cleanCode = (code || '').trim().toUpperCase();
     const room = rooms.get(cleanCode);
-    if (!room) return cb?.({ ok: false, error: 'Không tìm thấy phòng với mã này!' });
+    if (!room) return cb?.({ ok: false, expired: true, error: 'Không tìm thấy phòng với mã này!' });
 
     // Check reconnect by clientId
     let existing = room.players.find((p) => p.id === clientId);
@@ -682,6 +685,76 @@ io.on('connection', (socket) => {
     botHandlers.submitVerdict(ctx.room, ctx.player.id, choice);
   });
 
+  socket.on('game:toggleSkip', () => {
+    const ctx = getCtx();
+    if (!ctx) return;
+    const { room, player } = ctx;
+    if (!player.alive || player.isSpectator) return;
+    if (![PHASES.DAY_DISCUSS, PHASES.DAY_DEFENSE, PHASES.NIGHT].includes(room.phase)) return;
+
+    if (!room.skipVotes) room.skipVotes = [];
+    const idx = room.skipVotes.indexOf(player.id);
+    if (idx >= 0) room.skipVotes.splice(idx, 1);
+    else room.skipVotes.push(player.id);
+
+    const alive = getAlivePlayers(room);
+    if (alive.length > 0 && alive.every((a) => room.skipVotes.includes(a.id))) {
+      if (room.phase === PHASES.DAY_DISCUSS) return finishDayDiscuss(room);
+      if (room.phase === PHASES.DAY_DEFENSE) return enterDayVerdict(room);
+      if (room.phase === PHASES.NIGHT && room.nightStage === 'EARLY') return triggerNightLate(room);
+      if (room.phase === PHASES.NIGHT && room.nightStage === 'LATE') return triggerDawn(room);
+    }
+    broadcastRoom(room);
+  });
+
+  socket.on('room:leave', (_payload, cb) => {
+    const ctx = getCtx();
+    socketIndex.delete(socket.id);
+    if (!ctx) return cb?.({ ok: true });
+    const { room, player } = ctx;
+
+    if (room.phase === PHASES.LOBBY || room.phase === PHASES.GAME_OVER || player.isSpectator) {
+      room.players = room.players.filter((p) => p.id !== player.id);
+      if (room.phase === PHASES.LOBBY) {
+        room.settings.roleCounts = getBalancedRoles(room.players.length);
+      }
+    } else {
+      player.alive = false;
+      player.connected = false;
+      player.socketId = null;
+      player.deathInfo = { day: room.dayCount, phase: room.phase, cause: 'leave' };
+      room.publicLogs.push({
+        id: Date.now() + Math.random(),
+        day: room.dayCount,
+        type: 'info',
+        text: `🚪 ${player.name} đã rời khỏi ngôi làng.`,
+      });
+    }
+
+    if (room.hostId === player.id) {
+      const nextHost = room.players.find((p) => !p.isBot && p.connected);
+      if (nextHost) room.hostId = nextHost.id;
+    }
+
+    const anyHuman = room.players.some((p) => !p.isBot);
+    if (!anyHuman) {
+      clearRoomTimer(room.code);
+      rooms.delete(room.code);
+      return cb?.({ ok: true });
+    }
+
+    if (room.phase !== PHASES.LOBBY && room.phase !== PHASES.GAME_OVER) {
+      const win = checkWinCondition(room);
+      if (win) {
+        enterGameOver(room);
+        return cb?.({ ok: true });
+      }
+    }
+
+    broadcastRoom(room);
+    cb?.({ ok: true });
+  });
+
   socket.on('chat:send', ({ channel, text }) => {
     const ctx = getCtx();
     if (!ctx || !text) return;
@@ -761,5 +834,5 @@ io.on('connection', (socket) => {
 
 const PORT = process.env.PORT || 3001;
 server.listen(PORT, () => {
-  console.log(`Ma Soi Pixel Village server listening on http://localhost:${PORT}`);
+  console.log(`Ma Cho server listening on http://localhost:${PORT}`);
 });

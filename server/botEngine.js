@@ -65,10 +65,16 @@ export function scheduleBotActions(room, handlers) {
   const bots = getAlivePlayers(room).filter((p) => p.isBot);
   if (bots.length === 0) return;
 
+  const markBotReady = (botId) => {
+    if (!room.skipVotes) room.skipVotes = [];
+    if (!room.skipVotes.includes(botId)) room.skipVotes.push(botId);
+  };
+
   const alive = getAlivePlayers(room);
   const pickRandom = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
   if (room.phase === PHASES.NIGHT) {
+    for (const bot of bots) markBotReady(bot.id);
     if (room.nightStage === 'EARLY') {
       for (const bot of bots) {
         if (bot.role === 'cupid' && room.dayCount === 1 && room.nightActions.cupidTargets.length < 2) {
@@ -194,6 +200,10 @@ export function scheduleBotActions(room, handlers) {
           handlers.submitDayVote(room, bot.id, targetChoice);
         }
       }, 4500 + Math.random() * 5500);
+    }
+  } else if (room.phase === PHASES.DAY_DEFENSE) {
+    for (const bot of bots) {
+      if (bot.id !== room.accusedId) markBotReady(bot.id);
     }
   } else if (room.phase === PHASES.DAY_VERDICT) {
     for (const bot of bots) {

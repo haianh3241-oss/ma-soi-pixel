@@ -10,6 +10,10 @@ export function useVoiceChat({ socket, room, myId, voicePerms }) {
   const [micPermission, setMicPermission] = useState('idle'); // 'idle' | 'granted' | 'denied' | 'unsupported'
   const [speakingPeers, setSpeakingPeers] = useState({}); // playerId -> boolean
   const [peerVolumes, setPeerVolumes] = useState({}); // playerId -> 0..1
+  const [masterVolume, setMasterVolumeState] = useState(() => {
+    const saved = localStorage.getItem('macho_voice_vol');
+    return saved !== null ? Number(saved) : 1;
+  });
 
   const localStreamRef = useRef(null);
   const peersRef = useRef(new Map()); // peerId -> { pc, audioEl, stream, analyser }
@@ -41,10 +45,10 @@ export function useVoiceChat({ socket, room, myId, voicePerms }) {
     peersRef.current.forEach((entry, peerId) => {
       if (entry.audioEl) {
         entry.audioEl.muted = !hearable.has(peerId);
-        entry.audioEl.volume = peerVolumes[peerId] ?? 1;
+        entry.audioEl.volume = Math.max(0, Math.min(1, masterVolume * (peerVolumes[peerId] ?? 1)));
       }
     });
-  }, [voicePerms?.hearablePeerIds, peerVolumes]);
+  }, [voicePerms?.hearablePeerIds, peerVolumes, masterVolume]);
 
   const cleanupPeer = useCallback((peerId) => {
     const entry = peersRef.current.get(peerId);
@@ -303,13 +307,21 @@ export function useVoiceChat({ socket, room, myId, voicePerms }) {
     setPeerVolumes((prev) => ({ ...prev, [peerId]: val }));
   }, []);
 
+  const setMasterVolume = useCallback((val) => {
+    const clamped = Math.max(0, Math.min(1, val));
+    setMasterVolumeState(clamped);
+    localStorage.setItem('macho_voice_vol', String(clamped));
+  }, []);
+
   return {
     micEnabled: micEnabled && Boolean(voicePerms?.canSpeak),
     userMicWanted: micEnabled,
     micPermission,
     speakingPeers,
     peerVolumes,
+    masterVolume,
     toggleMic,
     setVolume,
+    setMasterVolume,
   };
 }

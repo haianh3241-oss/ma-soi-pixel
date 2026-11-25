@@ -47,6 +47,7 @@ export function createRoom(hostPlayer, code) {
     hunterQueue: [], // playerIds of hunters needing to shoot
     hunterReturnPhase: null, // 'DAY_DISCUSS' | 'NIGHT'
     dayVotes: {}, // voterId -> targetId | 'skip'
+    skipVotes: [], // playerIds ready to skip current phase
     accusedId: null,
     verdictVotes: {}, // voterId -> 'HANG' | 'SPARE'
     voteHistory: [], // [{ day, type, accusedId, votes, result }]
@@ -195,6 +196,7 @@ export function startGame(room) {
   room.hunterQueue = [];
   room.hunterReturnPhase = null;
   room.dayVotes = {};
+  room.skipVotes = [];
   room.accusedId = null;
   room.verdictVotes = {};
   room.voteHistory = [];
@@ -228,6 +230,8 @@ export function enterNight(room) {
   room.nightStage = 'EARLY';
   room.nightActions = createEmptyNightActions();
   room.dayVotes = {};
+  room.skipVotes = [];
+  room.skipVotes = [];
   room.accusedId = null;
   room.verdictVotes = {};
   room.extensionUsedToday = false;
@@ -315,6 +319,7 @@ export function enterLateNight(room) {
   }
 
   room.nightStage = 'LATE';
+  room.skipVotes = [];
 }
 
 export function checkLateNightComplete(room) {
@@ -832,6 +837,7 @@ export function sanitizeRoomForPlayer(room, viewerId) {
     pendingDeaths: room.pendingDeaths,
     publicDayVotes,
     publicVerdictVotes,
+    skipVotes: room.skipVotes || [],
     voteHistory: room.voteHistory,
     publicLogs: room.publicLogs,
     secretLogs: isGameOver ? room.secretLogs : [],
