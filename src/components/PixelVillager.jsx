@@ -1,8 +1,12 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { sfx } from '../audio/sfx.js';
-import { ASSET_PATHS, POKE_EFFECTS } from '../../graphics-pack/themeConfig.js';
+import { ASSET_PATHS, POKE_EFFECTS, SPRITE_SHEETS } from '../../graphics-pack/themeConfig.js';
 
 export { POKE_EFFECTS };
+
+// Cache missing optional state images (<id>_sleep.png, <id>_talk.png, <id>_poke.png)
+// so we never re-probe missing files on every render
+const missingStateSprites = new Set();
 
 const PARTICLE_VECTORS = [
   { dx: '-28px', dy: '-34px', rot: '-35deg' },
@@ -17,12 +21,15 @@ export default function PixelVillager({
   size = 76,
   isNight = false,
   eyeState = 'awake', // 'awake' | 'sleep' | 'wolf'
+  isSpeaking = false,
   animate = true,
   isAccused = false,
   enablePoke = false,
   onPokeExtra = null,
 }) {
   const [bursts, setBursts] = useState([]);
+  const [failedUrls, setFailedUrls] = useState({});
+  const [frameIdx, setFrameIdx] = useState(0);
 
   const handlePoke = (e) => {
     if (!enablePoke) return;
@@ -46,7 +53,44 @@ export default function PixelVillager({
   const isSleeping = alive && eyeState === 'sleep';
   const isWolfEyes = alive && eyeState === 'wolf';
 
-  const spriteSrc = alive ? ASSET_PATHS.character(avatarId) : ASSET_PATHS.ghostTombstone;
+  // Determine desired state image: poke -> sleep -> talk -> idle
+  const desiredState = !alive
+    ? 'dead'
+    : activeBurst
+      ? 'poke'
+      : isSleeping
+        ? 'sleep'
+        : isSpeaking
+          ? 'talk'
+          : 'idle';
+
+  const baseSrc = alive ? ASSET_PATHS.character(avatarId) : ASSET_PATHS.ghostTombstone;
+  const stateUrl =
+    alive && desiredState !== 'idle' ? ASSET_PATHS.characterState(avatarId, desiredState) : null;
+  const useStateUrl = Boolean(stateUrl && !missingStateSprites.has(stateUrl) && !failedUrls[stateUrl]);
+  const spriteSrc = useStateUrl ? stateUrl : baseSrc;
+
+  // Optional horizontal sprite sheet animation if configured in themeConfig.js -> SPRITE_SHEETS
+  const sheetCfg = SPRITE_SHEETS[avatarId];
+  const frameCount = !alive || !sheetCfg
+    ? 1
+    : desiredState === 'sleep'
+      ? sheetCfg.sleepFrames || 1
+      : desiredState === 'talk'
+        ? sheetCfg.talkFrames || 1
+        : sheetCfg.idleFrames || 1;
+
+  useEffect(() => {
+    if (frameCount <= 1) {
+      setFrameIdx(0);
+      return;
+    }
+    const fps = sheetCfg?.fps || 6;
+    const iv = setInterval(() => {
+      setFrameIdx((f) => (f + 1) % frameCount);
+    }, Math.round(1000 / fps));
+    return () => clearInterval(iv);
+  }, [frameCount, sheetCfg?.fps]);
 
   const idleClass = !alive
     ? 'anim-ghost'
@@ -54,9 +98,11 @@ export default function PixelVillager({
       ? activeBurst.anim
       : isSleeping
         ? 'anim-sleep-nod'
-        : animate
-          ? 'anim-soul-idle'
-          : '';
+        : isSpeaking
+          ? 'anim-talk-active'
+          : animate
+            ? 'anim-soul-idle'
+            : '';
 
   return (
     <div
@@ -70,7 +116,7 @@ export default function PixelVillager({
         style={{ width: size * 0.68, height: Math.max(6, size * 0.14) }}
       />
 
-      {/* Comic white zZ bubble (matching Supercell Night style) */}
+      {/* Comic white zZ bubble */}
       {isSleeping && !activeBurst && (
         <div className="pointer-events-none absolute -top-2 -right-2 z-20 sc-zzz-bubble px-1.5 py-0.2 text-[10px] leading-tight anim-zzz select-none">
           zZ
@@ -127,19 +173,42 @@ export default function PixelVillager({
         </div>
       ))}
 
-      <img
-        src={spriteSrc}
-        alt={avatarId}
-        draggable={false}
-        className={`relative z-10 w-full h-full object-contain select-none ${isWolfEyes ? 'wolf-eye-glow' : ''}`}
-        style={{
-          filter: isAccused
-            ? 'drop-shadow(0 0 10px rgba(239,68,68,0.95)) drop-shadow(0 3px 0 rgba(0,0,0,0.5))'
-            : isNight && isSleeping
-              ? 'brightness(0.78) drop-shadow(0 3px 0 rgba(0,0,0,0.45))'
-              : 'drop-shadow(0 3px 0 rgba(0,0,0,0.45))',
-        }}
-      />
+      {frameCount > 1 ? (
+        <div
+          className={`relative z-10 w-full h-full select-none ${isWolfEyes ? 'wolf-eye-glow' : ''}`}
+          style={{
+            backgroundImage: `url('${spriteSrc}')`,
+            backgroundSize: `${frameCount * 100}% 100%`,
+            backgroundPosition: `${(frameIdx / Math.max(1, frameCount - 1)) * 100}% 0%`,
+            backgroundRepeat: 'no-repeat',
+            filter: isAccused
+              ? 'drop-shadow(0 0 10px rgba(239,68,68,0.95)) drop-shadow(0 3px 0 rgba(0,0,0,0.5))'
+              : isNight && isSleeping
+                ? 'brightness(0.78) drop-shadow(0 3px 0 rgba(0,0,0,0.45))'
+                : 'drop-shadow(0 3px 0 rgba(0,0,0,0.45))',
+          }}
+        />
+      ) : (
+        <img
+          src={spriteSrc}
+          alt={avatarId}
+          draggable={false}
+          onError={() => {
+            if (useStateUrl && stateUrl) {
+              missingStateSprites.add(stateUrl);
+              setFailedUrls((prev) => ({ ...prev, [stateUrl]: true }));
+            }
+          }}
+          className={`relative z-10 w-full h-full object-contain select-none ${isWolfEyes ? 'wolf-eye-glow' : ''}`}
+          style={{
+            filter: isAccused
+              ? 'drop-shadow(0 0 10px rgba(239,68,68,0.95)) drop-shadow(0 3px 0 rgba(0,0,0,0.5))'
+              : isNight && isSleeping
+                ? 'brightness(0.78) drop-shadow(0 3px 0 rgba(0,0,0,0.45))'
+                : 'drop-shadow(0 3px 0 rgba(0,0,0,0.45))',
+          }}
+        />
+      )}
     </div>
   );
 }

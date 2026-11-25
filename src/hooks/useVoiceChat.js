@@ -16,7 +16,7 @@ export function useVoiceChat({ socket, room, myId, voicePerms }) {
   });
 
   const localStreamRef = useRef(null);
-  const peersRef = useRef(new Map()); // peerId -> { pc, audioEl, stream, analyser }
+  const peersRef = useRef(new Map()); // peerId -> { pc, audioSender, audioEl, stream, analyser, pendingCandidates }
   const audioCtxRef = useRef(null);
   const localAnalyserRef = useRef(null);
   const voicePermsRef = useRef(voicePerms);
@@ -25,19 +25,55 @@ export function useVoiceChat({ socket, room, myId, voicePerms }) {
   voicePermsRef.current = voicePerms;
   micEnabledRef.current = micEnabled;
 
-  // Enforce mic track enablement whenever phase/voice permissions or user mute toggles
+  // Enforce mic track enablement AND two-ended WebRTC sender gating strictly from server audibleToPeerIds
   const syncLocalTrackState = useCallback(() => {
     const stream = localStreamRef.current;
-    if (!stream) return;
+    const localTrack = stream?.getAudioTracks?.()[0] || null;
     const allowed = Boolean(voicePermsRef.current?.canSpeak) && micEnabledRef.current;
-    stream.getAudioTracks().forEach((t) => {
-      t.enabled = allowed;
+    if (stream) {
+      stream.getAudioTracks().forEach((t) => {
+        t.enabled = allowed;
+      });
+    }
+
+    const audible = new Set(voicePermsRef.current?.audibleToPeerIds || []);
+    peersRef.current.forEach((entry, peerId) => {
+      const sender =
+        entry.audioSender ||
+        entry.pc.getSenders().find((s) => s.track?.kind === 'audio') ||
+        entry.pc.getTransceivers().find((t) => t.receiver?.track?.kind === 'audio' || t.sender?.track?.kind === 'audio')
+          ?.sender ||
+        null;
+      if (!sender) return;
+      entry.audioSender = sender;
+      const targetTrack = allowed && localTrack && audible.has(peerId) ? localTrack : null;
+      if (sender.track !== targetTrack) {
+        sender.replaceTrack(targetTrack).catch(() => {});
+      }
     });
   }, []);
 
   useEffect(() => {
     syncLocalTrackState();
-  }, [micEnabled, voicePerms?.canSpeak, syncLocalTrackState]);
+  }, [micEnabled, voicePerms?.canSpeak, voicePerms?.audibleToPeerIds, syncLocalTrackState]);
+
+  const unlockAudioPlayback = useCallback(() => {
+    if (audioCtxRef.current?.state === 'suspended') {
+      audioCtxRef.current.resume().catch(() => {});
+    }
+    peersRef.current.forEach((entry) => {
+      if (entry.audioEl && entry.audioEl.srcObject && entry.audioEl.paused) {
+        entry.audioEl.play().catch(() => {});
+      }
+    });
+  }, []);
+
+  useEffect(() => {
+    window.addEventListener('pointerdown', unlockAudioPlayback, { passive: true });
+    return () => {
+      window.removeEventListener('pointerdown', unlockAudioPlayback);
+    };
+  }, [unlockAudioPlayback]);
 
   // Enforce incoming peer audio muting strictly from server hearablePeerIds
   useEffect(() => {
@@ -104,14 +140,15 @@ export function useVoiceChat({ socket, room, myId, voicePerms }) {
       }
 
       const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
-      const entry = { pc, audioEl: null, stream: null, analyser: null };
+      const entry = {
+        pc,
+        audioSender: null,
+        audioEl: null,
+        stream: null,
+        analyser: null,
+        pendingCandidates: [],
+      };
       peersRef.current.set(peerId, entry);
-
-      if (localStreamRef.current) {
-        localStreamRef.current.getTracks().forEach((track) => {
-          pc.addTrack(track, localStreamRef.current);
-        });
-      }
 
       pc.onicecandidate = (e) => {
         if (e.candidate) {
@@ -123,8 +160,9 @@ export function useVoiceChat({ socket, room, myId, voicePerms }) {
       };
 
       pc.ontrack = (e) => {
-        if (e.streams && e.streams[0]) {
-          attachRemoteStream(peerId, e.streams[0]);
+        const remoteStream = (e.streams && e.streams[0]) || (e.track ? new MediaStream([e.track]) : null);
+        if (remoteStream) {
+          attachRemoteStream(peerId, remoteStream);
         }
       };
 
@@ -135,7 +173,19 @@ export function useVoiceChat({ socket, room, myId, voicePerms }) {
       };
 
       if (initiator) {
-        pc.createOffer({ offerToReceiveAudio: true })
+        try {
+          const transceiver = pc.addTransceiver('audio', { direction: 'sendrecv' });
+          entry.audioSender = transceiver.sender;
+        } catch {
+          if (localStreamRef.current) {
+            localStreamRef.current.getAudioTracks().forEach((track) => {
+              entry.audioSender = pc.addTrack(track, localStreamRef.current);
+            });
+          }
+        }
+        syncLocalTrackState();
+
+        pc.createOffer()
           .then((offer) => pc.setLocalDescription(offer))
           .then(() => {
             socket.emit('webrtc:signal', {
@@ -148,11 +198,12 @@ export function useVoiceChat({ socket, room, myId, voicePerms }) {
 
       return pc;
     },
-    [socket, myId, attachRemoteStream, cleanupPeer]
+    [socket, myId, attachRemoteStream, cleanupPeer, syncLocalTrackState]
   );
 
   // Request microphone
   const toggleMic = useCallback(async () => {
+    unlockAudioPlayback();
     if (!navigator.mediaDevices?.getUserMedia) {
       setMicPermission('unsupported');
       return;
@@ -171,13 +222,15 @@ export function useVoiceChat({ socket, room, myId, voicePerms }) {
         setMicPermission('granted');
         setMicEnabled(true);
         micEnabledRef.current = true;
-        syncLocalTrackState();
 
         // Setup local analyser
         try {
           if (!audioCtxRef.current) {
             const Ctx = window.AudioContext || window.webkitAudioContext;
             if (Ctx) audioCtxRef.current = new Ctx();
+          }
+          if (audioCtxRef.current?.state === 'suspended') {
+            audioCtxRef.current.resume().catch(() => {});
           }
           if (audioCtxRef.current) {
             const src = audioCtxRef.current.createMediaStreamSource(stream);
@@ -188,47 +241,56 @@ export function useVoiceChat({ socket, room, myId, voicePerms }) {
           }
         } catch {}
 
-        // Renegotiate with existing peers to attach audio track
-        peersRef.current.forEach((entry, peerId) => {
-          stream.getTracks().forEach((track) => {
-            const senders = entry.pc.getSenders();
-            if (!senders.some((s) => s.track === track)) {
-              entry.pc.addTrack(track, stream);
-            }
-          });
-          entry.pc
-            .createOffer()
-            .then((offer) => entry.pc.setLocalDescription(offer))
-            .then(() => {
-              socket?.emit('webrtc:signal', {
-                toPlayerId: peerId,
-                signal: { type: 'sdp', sdp: entry.pc.localDescription },
-              });
-            })
-            .catch(() => {});
-        });
+        // Attach audio track via existing transceivers without triggering SDP renegotiation glare
+        syncLocalTrackState();
       } catch {
         setMicPermission('denied');
       }
     } else {
-      setMicEnabled((prev) => !prev);
+      setMicEnabled((prev) => {
+        const next = !prev;
+        micEnabledRef.current = next;
+        syncLocalTrackState();
+        return next;
+      });
     }
-  }, [socket, syncLocalTrackState]);
+  }, [syncLocalTrackState, unlockAudioPlayback]);
 
   // Listen for incoming WebRTC signals
   useEffect(() => {
     if (!socket) return;
     const onSignal = async ({ fromPlayerId, signal }) => {
-      let pc = peersRef.current.get(fromPlayerId)?.pc;
+      let entry = peersRef.current.get(fromPlayerId);
+      let pc = entry?.pc;
       if (!pc) {
         pc = createPeerConnection(fromPlayerId, false);
+        entry = peersRef.current.get(fromPlayerId);
       }
       if (!pc) return;
 
       try {
         if (signal.type === 'sdp') {
           await pc.setRemoteDescription(new RTCSessionDescription(signal.sdp));
+
+          if (entry?.pendingCandidates?.length) {
+            const queued = entry.pendingCandidates.splice(0);
+            for (const cand of queued) {
+              try {
+                await pc.addIceCandidate(new RTCIceCandidate(cand));
+              } catch {}
+            }
+          }
+
           if (signal.sdp.type === 'offer') {
+            const audioTransceiver = pc
+              .getTransceivers()
+              .find((t) => t.receiver?.track?.kind === 'audio' || t.sender?.track?.kind === 'audio');
+            if (audioTransceiver) {
+              audioTransceiver.direction = 'sendrecv';
+              if (entry) entry.audioSender = audioTransceiver.sender;
+            }
+            syncLocalTrackState();
+
             const answer = await pc.createAnswer();
             await pc.setLocalDescription(answer);
             socket.emit('webrtc:signal', {
@@ -237,7 +299,11 @@ export function useVoiceChat({ socket, room, myId, voicePerms }) {
             });
           }
         } else if (signal.type === 'candidate' && signal.candidate) {
-          await pc.addIceCandidate(new RTCIceCandidate(signal.candidate));
+          if (!pc.remoteDescription) {
+            entry?.pendingCandidates.push(signal.candidate);
+          } else {
+            await pc.addIceCandidate(new RTCIceCandidate(signal.candidate));
+          }
         }
       } catch {}
     };
@@ -246,7 +312,7 @@ export function useVoiceChat({ socket, room, myId, voicePerms }) {
     return () => {
       socket.off('webrtc:signal', onSignal);
     };
-  }, [socket, createPeerConnection]);
+  }, [socket, createPeerConnection, syncLocalTrackState]);
 
   // Maintain mesh connections with all connected human players in the room
   useEffect(() => {

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { PHASES } from '../shared/constants.js';
 import {
   checkWinCondition,
+  computeVoicePermissions,
   createPlayer,
   createRoom,
   enterLateNight,
@@ -121,4 +122,71 @@ test('Cursed Wolf turns victim into werewolf, and Elder survives first wolf bite
   assert.equal(room.players[1].role, 'werewolf');
   assert.equal(room.cursedUsed, true);
   assert.equal(checkWinCondition(room), null); // 2 wolves vs 3 non-wolves
+});
+
+test('Voice permissions strictly enforce Lobby, Day, Night, Wolf, Village, and Dead channels', () => {
+  const host = createPlayer({ id: 'h1', name: 'ChuPhong', avatarId: 'blacksmith' });
+  const room = createRoom(host, 'VOIC01');
+  room.players.push(
+    createPlayer({ id: 'h2', name: 'DanLang', avatarId: 'farmer' }),
+    createPlayer({ id: 'h3', name: 'SoiMot', avatarId: 'butcher' }),
+    createPlayer({ id: 'h4', name: 'SoiHai', avatarId: 'drunk' }),
+    createPlayer({ id: 'h5', name: 'HonMa', avatarId: 'oldwoman' }),
+    createPlayer({ id: 'h6', name: 'MaThuHai', avatarId: 'oldman' })
+  );
+  room.players[5].isSpectator = true;
+  room.players.push({ ...createPlayer({ id: 'b1', name: 'BotAI', avatarId: 'waterpipe' }), isBot: true });
+
+  // 1. LOBBY: all connected humans talk freely (bots excluded)
+  const lobbyPerms = computeVoicePermissions(room, room.players[0]);
+  assert.equal(lobbyPerms.canSpeak, true);
+  assert.equal(lobbyPerms.channel, 'free');
+  assert.deepEqual(lobbyPerms.hearablePeerIds.sort(), ['h2', 'h3', 'h4', 'h5', 'h6']);
+  assert.deepEqual(lobbyPerms.audibleToPeerIds.sort(), ['h2', 'h3', 'h4', 'h5', 'h6']);
+
+  // Assign roles and kill h5 for active game tests
+  room.players[0].role = 'seer';
+  room.players[1].role = 'villager';
+  room.players[2].role = 'cursed_wolf';
+  room.players[3].role = 'werewolf';
+  room.players[4].role = 'villager';
+  room.players[4].alive = false;
+  room.players[5].alive = false;
+
+  // 2. NIGHT - Living Village (seer/villager): completely locked, cannot hear anyone
+  room.phase = PHASES.NIGHT;
+  const nightVillager = computeVoicePermissions(room, room.players[1]);
+  assert.equal(nightVillager.canSpeak, false);
+  assert.equal(nightVillager.channel, 'muted');
+  assert.deepEqual(nightVillager.hearablePeerIds, []);
+  assert.deepEqual(nightVillager.audibleToPeerIds, []);
+
+  // 3. NIGHT - Living Wolf: talks & hears ONLY living wolves (h4), never dead or villagers
+  const nightWolf = computeVoicePermissions(room, room.players[2]);
+  assert.equal(nightWolf.canSpeak, true);
+  assert.equal(nightWolf.channel, 'wolf');
+  assert.deepEqual(nightWolf.hearablePeerIds, ['h4']);
+  assert.deepEqual(nightWolf.audibleToPeerIds, ['h4']);
+
+  // 4. NIGHT - Dead/Spectator: talks & hears ONLY dead/spectators (h6), never wolves or living villagers
+  const nightDead = computeVoicePermissions(room, room.players[4]);
+  assert.equal(nightDead.canSpeak, true);
+  assert.equal(nightDead.channel, 'dead');
+  assert.deepEqual(nightDead.hearablePeerIds, ['h6']);
+  assert.deepEqual(nightDead.audibleToPeerIds, ['h6']);
+
+  // 5. DAY_DISCUSS - Living player (including wolves): talks on village channel, only hears living, audible to everyone
+  room.phase = PHASES.DAY_DISCUSS;
+  const dayWolf = computeVoicePermissions(room, room.players[2]);
+  assert.equal(dayWolf.canSpeak, true);
+  assert.equal(dayWolf.channel, 'village');
+  assert.deepEqual(dayWolf.hearablePeerIds.sort(), ['h1', 'h2', 'h4']);
+  assert.deepEqual(dayWolf.audibleToPeerIds.sort(), ['h1', 'h2', 'h4', 'h5', 'h6']);
+
+  // 6. DAY_DISCUSS - Dead player: hears ALL (living + dead), audible ONLY to other dead/spectators
+  const dayDead = computeVoicePermissions(room, room.players[4]);
+  assert.equal(dayDead.canSpeak, true);
+  assert.equal(dayDead.channel, 'dead');
+  assert.deepEqual(dayDead.hearablePeerIds.sort(), ['h1', 'h2', 'h3', 'h4', 'h6']);
+  assert.deepEqual(dayDead.audibleToPeerIds, ['h6']);
 });

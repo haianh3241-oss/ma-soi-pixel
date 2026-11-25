@@ -218,13 +218,36 @@ body {
    ========================================================= */
 
 @keyframes soulBounce {
-  0%, 100% { transform: translateY(0) scaleY(1); }
-  50% { transform: translateY(-3px) scaleY(0.97); }
+  0%, 100% {
+    transform: translateY(0) scaleX(1) scaleY(1);
+  }
+  50% {
+    transform: translateY(-2px) scaleX(1.025) scaleY(0.965);
+  }
+}
+
+@keyframes talkBounce {
+  0%, 100% {
+    transform: translateY(0) scale(1);
+  }
+  25% {
+    transform: translateY(-4px) scale(1.03, 0.98);
+  }
+  50% {
+    transform: translateY(0) scale(0.99, 1.02);
+  }
+  75% {
+    transform: translateY(-3px) scale(1.02, 0.98);
+  }
 }
 
 @keyframes sleepNod {
-  0%, 100% { transform: translateY(0) rotate(-1.5deg); }
-  50% { transform: translateY(2px) rotate(2deg); }
+  0%, 100% {
+    transform: translateY(0) scaleY(1) rotate(-1.5deg);
+  }
+  50% {
+    transform: translateY(2px) scaleX(1.03) scaleY(0.95) rotate(2deg);
+  }
 }
 
 @keyframes ghostFloat {
@@ -314,8 +337,9 @@ body {
   100% { transform: translate(var(--to-x), var(--to-y)) scale(1.7) rotate(360deg); opacity: 0; }
 }
 
-.anim-soul-idle { animation: soulBounce 1.15s ease-in-out infinite; }
-.anim-sleep-nod { animation: sleepNod 2.6s ease-in-out infinite; }
+.anim-soul-idle { animation: soulBounce 1.8s ease-in-out infinite; transform-origin: bottom center; }
+.anim-talk-active { animation: talkBounce 0.48s ease-in-out infinite; transform-origin: bottom center; }
+.anim-sleep-nod { animation: sleepNod 2.8s ease-in-out infinite; transform-origin: bottom center; }
 .anim-ghost { animation: ghostFloat 2.1s ease-in-out infinite; }
 .anim-fire { animation: campfireFlicker 0.6s ease-in-out infinite; }
 .anim-smoke { animation: smokeRise 1.8s ease-out infinite; }

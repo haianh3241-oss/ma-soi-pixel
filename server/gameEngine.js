@@ -848,3 +848,82 @@ export function sanitizeRoomForPlayer(room, viewerId) {
     chat: visibleChat.slice(-100),
   };
 }
+
+export function computeVoicePermissions(room, viewer) {
+  if (!room || !viewer) {
+    return {
+      canSpeak: false,
+      channel: 'muted',
+      label: 'Chưa kết nối',
+      hearablePeerIds: [],
+      audibleToPeerIds: [],
+    };
+  }
+
+  const others = room.players.filter((p) => !p.isBot && p.connected && p.id !== viewer.id);
+  if (room.phase === PHASES.LOBBY || room.phase === PHASES.GAME_OVER) {
+    const ids = others.map((p) => p.id);
+    return {
+      canSpeak: true,
+      channel: 'free',
+      label: 'Trò chuyện tự do',
+      hearablePeerIds: ids,
+      audibleToPeerIds: ids,
+    };
+  }
+
+  const viewerIsDead = !viewer.alive || viewer.isSpectator;
+  const viewerIsWolf = !viewerIsDead && isWolfRole(viewer.role);
+
+  if (room.phase === PHASES.NIGHT) {
+    if (viewerIsDead) {
+      const deadIds = others.filter((p) => !p.alive || p.isSpectator).map((p) => p.id);
+      return {
+        canSpeak: true,
+        channel: 'dead',
+        label: 'Cõi Âm (Linh Hồn)',
+        hearablePeerIds: deadIds,
+        audibleToPeerIds: deadIds,
+      };
+    }
+    if (viewerIsWolf) {
+      const wolfIds = others.filter((p) => p.alive && !p.isSpectator && isWolfRole(p.role)).map((p) => p.id);
+      return {
+        canSpeak: true,
+        channel: 'wolf',
+        label: 'Kênh Kín Ma Sói',
+        hearablePeerIds: wolfIds,
+        audibleToPeerIds: wolfIds,
+      };
+    }
+    return {
+      canSpeak: false,
+      channel: 'muted',
+      label: 'Ban đêm (Khóa Mic)',
+      hearablePeerIds: [],
+      audibleToPeerIds: [],
+    };
+  }
+
+  // Daytime / Dawn / Hunter / Defense / Verdict
+  if (viewerIsDead) {
+    return {
+      canSpeak: true,
+      channel: 'dead',
+      label: 'Cõi Âm (Nghe Làng, Nói Với Hồn Ma)',
+      hearablePeerIds: others.map((p) => p.id),
+      audibleToPeerIds: others.filter((p) => !p.alive || p.isSpectator).map((p) => p.id),
+    };
+  }
+
+  return {
+    canSpeak: true,
+    channel: 'village',
+    label:
+      room.phase === PHASES.DAY_DEFENSE && room.accusedId === viewer.id
+        ? 'Bục Trăn Trối (Đang Biện Hộ)'
+        : 'Cả Làng Thảo Luận',
+    hearablePeerIds: others.filter((p) => p.alive && !p.isSpectator).map((p) => p.id),
+    audibleToPeerIds: others.map((p) => p.id),
+  };
+}

@@ -197,6 +197,7 @@ export function scheduleBotActions(room, handlers) {
               if (others.length > 0) targetChoice = pickRandom(others).id;
             }
           }
+          markBotReady(bot.id);
           handlers.submitDayVote(room, bot.id, targetChoice);
         }
       }, 4500 + Math.random() * 5500);

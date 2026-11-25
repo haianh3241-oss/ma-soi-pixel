@@ -15,12 +15,18 @@ export const ASSET_PATHS = {
   nightBackground: '/backgrounds/bg_night.jpg',
   lobbyBackground: '/backgrounds/bg_night.jpg',
   character: (id) => `/characters/${id}.png`,
+  characterState: (id, state) => `/characters/${id}_${state}.png`, // state: 'sleep' | 'talk' | 'poke'
   campfireLit: '/props/campfire_lit.png',
   campfireOut: '/props/campfire_out.png',
   ghostTombstone: '/props/ghost_tombstone.png',
   roleIcon: (roleId) => `/roles/${roleId}.png`,
   throwable: (itemId) => `/throwables/${itemId}.png`,
 };
+
+// Cấu hình Sprite Sheet nhiều khung hình (tùy chọn — nếu bạn thiết kế vẽ dải ngang nhiều frame)
+// Ví dụ: { drunkard: { idleFrames: 4, sleepFrames: 2, fps: 6 } }
+// Nếu để trống {}, game tự động dùng hoạt ảnh thở/ngủ/nói/chạm mượt cho ảnh đơn!
+export const SPRITE_SHEETS = {};
 
 // Căn chỉnh vị trí vòng tròn nhân vật & kích thước trên nền quảng trường
 // (Bạn có thể mở màn hình ?preview=art để kéo thanh trượt tìm số đẹp rồi dán vào đây!)

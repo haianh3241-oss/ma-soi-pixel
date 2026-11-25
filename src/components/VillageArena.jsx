@@ -469,6 +469,7 @@ export default function VillageArena({
                 size={baseSprite}
                 isNight={isNight}
                 eyeState={getEyeState(p)}
+                isSpeaking={isSpeaking}
                 isAccused={isAccused}
                 enablePoke={true}
               />

@@ -367,6 +367,24 @@ export default function App() {
               onStartGame={(cb) => socket?.emit('room:startGame', {}, cb)}
             />
           </div>
+          {/* Floating Right-Side Mic Button in Lobby (matches in-game layout & mobile reminder) */}
+          <div className="fixed right-3 top-1/2 -translate-y-1/2 z-40 flex flex-col items-center gap-1">
+            <button
+              type="button"
+              onClick={voiceChat.toggleMic}
+              className={`sc-btn-mic w-14 h-14 shadow-xl ${
+                voiceChat.micEnabled
+                  ? 'bg-gradient-to-b from-emerald-400 to-green-600 text-white'
+                  : 'bg-gradient-to-b from-[#2a3357] to-[#171c34] text-rose-300'
+              } ${voiceChat.micPermission === 'idle' ? 'ring-2 ring-amber-300/80 ring-offset-2 ring-offset-[#0b0d17]' : ''}`}
+              title={voiceChat.micEnabled ? 'Tắt Mic thử giọng' : 'Bật Mic bên phải để thử giọng'}
+            >
+              {voiceChat.micEnabled ? <Mic className="w-6 h-6 drop-shadow" /> : <MicOff className="w-6 h-6" />}
+            </button>
+            <span className="px-1.5 py-0.5 rounded bg-[#111528]/90 border border-slate-700 text-[10px] font-bold text-amber-200 shadow">
+              {voiceChat.micEnabled ? 'Mic BẬT' : 'Thử Mic'}
+            </span>
+          </div>
         </div>
       ) : room.phase === PHASES.GAME_OVER ? (
         <GameOverModal

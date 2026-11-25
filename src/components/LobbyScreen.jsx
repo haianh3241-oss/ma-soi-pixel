@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Copy, Check, Plus, Trash2, Bot, Play, Sparkles, ScrollText, Mic, MicOff, Send, LogOut } from 'lucide-react';
+import { Copy, Check, Plus, Trash2, Bot, Play, Sparkles, ScrollText, Mic, MicOff, Send, LogOut, X } from 'lucide-react';
 import { ROLES, VILLAGERS } from '../../shared/constants.js';
 import { ASSET_PATHS, BRAND } from '../../graphics-pack/themeConfig.js';
 import PixelVillager from './PixelVillager.jsx';
@@ -220,6 +220,7 @@ export default function LobbyScreen({
   const [willDraft, setWillDraft] = useState(me?.will || '');
   const [chatText, setChatText] = useState('');
   const [startError, setStartError] = useState('');
+  const [audioHintDismissed, setAudioHintDismissed] = useState(false);
 
   const isHost = room.hostId === me?.id;
   const roleCounts = room.settings.roleCounts || {};
@@ -256,6 +257,59 @@ export default function LobbyScreen({
       }}
     >
       <div className="max-w-6xl mx-auto flex flex-col gap-3 pb-6">
+        {/* Compact Mobile Audio & Mic Permission Reminder Banner */}
+        {!audioHintDismissed && (
+          <div
+            className={`rounded-lg border-2 px-3 py-2 flex items-center justify-between gap-2 text-xs shadow ${
+              voiceChat?.micPermission === 'denied'
+                ? 'bg-rose-950/90 border-rose-500 text-rose-100'
+                : voiceChat?.micPermission === 'unsupported'
+                  ? 'bg-amber-950/90 border-amber-500 text-amber-100'
+                  : voiceChat?.micPermission === 'granted'
+                    ? 'bg-emerald-950/85 border-emerald-500/70 text-emerald-100'
+                    : 'bg-[#1b2342]/95 border-amber-400/70 text-amber-100'
+            }`}
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="shrink-0 text-sm">
+                {voiceChat?.micPermission === 'denied'
+                  ? '🚫'
+                  : voiceChat?.micPermission === 'granted'
+                    ? '✅'
+                    : '📱'}
+              </span>
+              <span className="font-semibold leading-snug">
+                {voiceChat?.micPermission === 'denied'
+                  ? 'Trình duyệt đang chặn Micro! Hãy chạm biểu tượng 🔒 trên thanh địa chỉ để cho phép Micro rồi tải lại.'
+                  : voiceChat?.micPermission === 'unsupported'
+                    ? 'Thiết bị hoặc kết nối hiện tại chưa hỗ trợ Micro (cần truy cập qua HTTPS).'
+                    : voiceChat?.micPermission === 'granted'
+                      ? 'Đã cấp quyền Mic! Bạn có thể bấm nút Mic tròn bên phải để thử giọng bất cứ lúc nào.'
+                      : 'Chạm màn hình để bật nhạc nền & bấm nút Mic bên phải để thử giọng'}
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5 shrink-0">
+              {voiceChat?.micPermission === 'idle' && (
+                <button
+                  type="button"
+                  onClick={voiceChat?.toggleMic}
+                  className="px-2.5 py-1 rounded bg-emerald-400 text-black font-bold text-[11px] hover:bg-emerald-300 cursor-pointer"
+                >
+                  Thử Mic
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setAudioHintDismissed(true)}
+                className="p-1 rounded hover:bg-white/10 text-slate-300 cursor-pointer"
+                title="Đóng nhắc nhở"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Top Invite Banner */}
         <div className="px-panel p-3 flex flex-wrap items-center justify-between gap-2">
           <div>

@@ -2,3 +2,5 @@ node_modules/
 dist/
 .env
 *.log
+goi-do-hoa-ma-cho/
+nhap-do-hoa-tu-ban.bat
