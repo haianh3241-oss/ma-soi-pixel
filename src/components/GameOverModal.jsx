@@ -107,7 +107,9 @@ export default function GameOverModal({
                         )}
                       </div>
                       <div className="text-[10px] text-slate-400">
-                        {p.alive ? '✅ Sống sót' : `💀 Chết ngày ${p.deathInfo?.day || '?'}`}
+                        {p.alive
+                          ? '✅ Sống sót'
+                          : `💀 Chết ${p.deathInfo?.phase === 'NIGHT' ? 'đêm' : 'ngày'} ${p.deathInfo?.day || '?'}`}
                       </div>
                     </div>
                   </div>

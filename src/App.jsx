@@ -410,12 +410,12 @@ export default function App() {
           </div>
 
           {roleOpen && (
-            <div className="absolute top-12 left-2 z-50 w-72 sm:w-80">
+            <div className="absolute top-12 left-2 z-[260] w-72 sm:w-80">
               <div className="relative">
                 <button
                   type="button"
                   onClick={() => setRoleOpen(false)}
-                  className="absolute -top-2 -right-2 z-50 w-6 h-6 rounded-full bg-rose-600 border-2 border-[#111322] text-white flex items-center justify-center cursor-pointer"
+                  className="absolute -top-2 -right-2 z-[270] w-6 h-6 rounded-full bg-rose-600 border-2 border-[#111322] text-white flex items-center justify-center cursor-pointer"
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>
@@ -492,7 +492,7 @@ export default function App() {
           </div>
 
           {bagOpen && (
-            <div className="absolute right-16 top-1/2 -translate-y-1/2 z-50 ggd-card p-2 grid grid-cols-4 gap-1.5 max-w-[216px]">
+            <div className="absolute right-16 top-1/2 -translate-y-1/2 z-[250] ggd-card p-2 grid grid-cols-4 gap-1.5 max-w-[216px]">
               {INTERACTIONS.map((item) => (
                 <button
                   key={item.id}
@@ -540,7 +540,7 @@ export default function App() {
           )}
 
           {chatOpen && inGame && (
-            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-50 w-[95vw] max-w-xl h-[42vh] min-h-[220px] max-h-[340px]">
+            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-[280] w-[95vw] max-w-xl h-[42vh] min-h-[220px] max-h-[340px]">
               <ChatVoicePanel
                 room={room}
                 me={me}
@@ -566,7 +566,7 @@ export default function App() {
       {leaveConfirm && (
         <div
           onClick={() => setLeaveConfirm(false)}
-          className="fixed inset-0 z-50 bg-black/65 backdrop-blur-xs flex items-center justify-center p-4"
+          className="fixed inset-0 z-[300] bg-black/65 backdrop-blur-xs flex items-center justify-center p-4"
         >
           <div onClick={(e) => e.stopPropagation()} className="ggd-card w-full max-w-xs p-4 text-center flex flex-col gap-3">
             <div className="font-extrabold text-base text-rose-300">🚪 Thoát khỏi ván đấu?</div>

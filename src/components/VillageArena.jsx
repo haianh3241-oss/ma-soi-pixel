@@ -269,13 +269,13 @@ export default function VillageArena({
     return null;
   };
 
-  // 2.5D Oblique Ellipse Layout (squashed Y for 3/4 top-down perspective!)
+  // 2.5D Oblique Ellipse Layout with safe margins for right Mic/Bag & bottom Skip/Chat bars
   const count = activePlayers.length;
-  const compact = size.w < 560 || size.h < 480;
-  const baseSprite = compact ? 48 : size.w > 950 ? 64 : 54;
-  const rx = Math.max(115, size.w * (size.w < 600 ? 0.37 : 0.36));
-  const ry = Math.max(88, size.h * (size.h < 500 ? 0.28 : 0.26));
-  const centerYOffset = size.h * 0.06; // shift ground slightly down to leave sky layer visible!
+  const compact = size.w < 600 || size.h < 520;
+  const baseSprite = compact ? 44 : size.w > 950 ? 62 : 52;
+  const rx = Math.max(105, Math.min(size.w * 0.34, size.w / 2 - 74));
+  const ry = Math.max(76, Math.min(size.h * 0.24, size.h / 2 - 102));
+  const centerYOffset = size.h * 0.01;
 
   const myDayVote = me ? room.publicDayVotes?.[me.id]?.targetId : null;
   const myVerdictVote = me ? room.publicVerdictVotes?.[me.id]?.choice : null;

@@ -11,7 +11,7 @@ export default function AudioMixerModal({ room, me, voiceChat, onClose }) {
   return (
     <div
       onClick={onClose}
-      className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4"
+      className="fixed inset-0 z-[300] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4"
     >
       <div
         onClick={(e) => e.stopPropagation()}

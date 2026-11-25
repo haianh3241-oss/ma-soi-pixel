@@ -155,7 +155,7 @@ export default function PixelVillager({
       style={{ width: size, height: size }}
     >
       {isSleeping && !activeBurst && (
-        <div className="pointer-events-none absolute -top-2 right-0 text-xs font-black text-indigo-200 anim-zzz select-none">
+        <div className="pointer-events-none absolute -top-2 left-0 text-xs font-black text-indigo-200 anim-zzz select-none drop-shadow-[0_1px_2px_#000]">
           zZz
         </div>
       )}
