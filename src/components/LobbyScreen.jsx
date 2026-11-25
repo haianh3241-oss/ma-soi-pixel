@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { Copy, Check, Plus, Trash2, Bot, Play, Sparkles, ScrollText, Mic, MicOff, Send, LogOut } from 'lucide-react';
 import { ROLES, VILLAGERS } from '../../shared/constants.js';
+import { ASSET_PATHS, BRAND } from '../../graphics-pack/themeConfig.js';
 import PixelVillager from './PixelVillager.jsx';
+import RoleIcon from './RoleIcon.jsx';
 
-export function HomeScreen({ onCreateRoom, onJoinRoom, initialCode = '' }) {
+export function HomeScreen({ onCreateRoom, onJoinRoom, onOpenArtStudio, initialCode = '' }) {
   const [name, setName] = useState(() => localStorage.getItem('masoi_name') || '');
   const [avatarId, setAvatarId] = useState(() => localStorage.getItem('masoi_avatar') || VILLAGERS[0].id);
   const [will, setWill] = useState(() => localStorage.getItem('masoi_will') || '');
@@ -40,19 +42,19 @@ export function HomeScreen({ onCreateRoom, onJoinRoom, initialCode = '' }) {
     <div
       className="min-h-dvh w-full bg-cover bg-center bg-fixed p-3 md:p-6 flex items-center justify-center relative"
       style={{
-        backgroundImage: "linear-gradient(rgba(10,14,28,0.72), rgba(10,14,28,0.82)), url('/assets/bg_night.jpg')",
+        backgroundImage: `linear-gradient(rgba(10,14,28,0.72), rgba(10,14,28,0.82)), url('${ASSET_PATHS.lobbyBackground}')`,
       }}
     >
       <div className="w-full max-w-4xl flex flex-col gap-4 my-auto">
         {/* Header */}
         <div className="text-center flex flex-col items-center gap-1">
           <div className="inline-flex items-center gap-2 rounded-full bg-amber-400/20 border border-amber-400/50 px-3.5 py-1 text-xs font-extrabold text-amber-300 backdrop-blur-xs">
-            <span>🐺 2D PARTY GAME EDITION</span>
+            <span>🐺 {BRAND.badge}</span>
             <span>•</span>
             <span>VOICE CHAT SẢNH CHỜ & TRONG VÁN</span>
           </div>
           <h1 className="font-brand text-4xl md:text-5xl text-amber-300 drop-shadow-[0_4px_0_#111322] mt-1">
-            MA CHÓ
+            {BRAND.title}
           </h1>
           <p className="text-xs md:text-sm text-slate-300">
             11 Vai trò mở rộng • Ẩn role người chết • Ném đồ cà khịa • Chơi ngay không cần tài khoản
@@ -180,8 +182,19 @@ export function HomeScreen({ onCreateRoom, onJoinRoom, initialCode = '' }) {
               </div>
             )}
 
-            <div className="px-panel-dark p-2.5 text-[11px] text-slate-400 leading-relaxed">
-              💡 <b>Mẹo:</b> Có thể thêm <b>Bot AI</b> trong phòng chờ nếu muốn test nhanh các vai trò trước khi rủ đủ hội bạn!
+            <div className="px-panel-dark p-2.5 text-[11px] text-slate-400 leading-relaxed flex flex-col gap-2">
+              <div>
+                💡 <b>Mẹo:</b> Có thể thêm <b>Bot AI</b> trong phòng chờ nếu muốn test nhanh các vai trò trước khi rủ đủ hội bạn!
+              </div>
+              {onOpenArtStudio && (
+                <button
+                  type="button"
+                  onClick={onOpenArtStudio}
+                  className="text-left text-[11px] font-bold text-amber-300/85 hover:text-amber-200 underline cursor-pointer"
+                >
+                  🎨 Mở Phòng Thử Đồ Họa (Art Studio Preview)
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -239,7 +252,7 @@ export default function LobbyScreen({
     <div
       className="flex-1 w-full bg-cover bg-center bg-fixed p-2.5 md:p-4"
       style={{
-        backgroundImage: "linear-gradient(rgba(10,14,28,0.74), rgba(10,14,28,0.84)), url('/assets/bg_night.jpg')",
+        backgroundImage: `linear-gradient(rgba(10,14,28,0.74), rgba(10,14,28,0.84)), url('${ASSET_PATHS.lobbyBackground}')`,
       }}
     >
       <div className="max-w-6xl mx-auto flex flex-col gap-3 pb-6">
@@ -472,7 +485,7 @@ export default function LobbyScreen({
                     className="px-panel-dark p-2 flex items-center justify-between gap-2 text-xs"
                   >
                     <div className="flex items-center gap-2 min-w-0">
-                      <span className="text-base">{role.icon}</span>
+                      <RoleIcon role={role} className="w-6 h-6 shrink-0" emojiClass="text-base leading-none" />
                       <div className="min-w-0">
                         <div className="font-bold truncate" style={{ color: role.color }}>
                           {role.name}

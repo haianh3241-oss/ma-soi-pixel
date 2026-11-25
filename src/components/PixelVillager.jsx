@@ -1,30 +1,8 @@
 import React, { useState } from 'react';
 import { sfx } from '../audio/sfx.js';
+import { ASSET_PATHS, POKE_EFFECTS } from '../../graphics-pack/themeConfig.js';
 
-export const POKE_EFFECTS = {
-  drunkard: { anim: 'anim-poke-stagger', sfx: 'glass', particles: ['🍾', '💚', '✨', '🥴'], caption: 'CHOANG!' },
-  florist: { anim: 'anim-poke-tickle', sfx: 'chime', particles: ['🌸', '🌺', '🌼', '💮'], caption: 'Hihi nhột!' },
-  butcher: { anim: 'anim-poke-chop', sfx: 'chop', particles: ['🔪', '💥', '💢', '🥩'], slash: true, caption: 'PHẬP!' },
-  waterpipe: { anim: 'anim-poke-stagger', sfx: 'waterpipe', particles: ['💨', '☁️', '💨', '🌫️'], caption: 'ROẸT~' },
-  smoker: { anim: 'anim-poke-tickle', sfx: 'cough', particles: ['💨', '🚬', '💭', '💨'], caption: 'Khụ khụ!' },
-  madman: { anim: 'anim-poke-spin', sfx: 'boing', particles: ['💫', '⭐', '🔩', '🤪'], caption: 'BOONG!' },
-  glutton: { anim: 'anim-poke-tickle', sfx: 'pop', particles: ['🍗', '🦴', '😋', '🍖'], caption: 'Ngoạm!' },
-  beggar: { anim: 'anim-poke-tickle', sfx: 'coin', particles: ['🪙', '🪰', '🥣', '✨'], caption: 'Keng keng!' },
-  blacksmith: { anim: 'anim-poke-chop', sfx: 'anvil', particles: ['🔥', '✨', '⚡', '🔨'], slash: true, caption: 'KENG!' },
-  oldman: { anim: 'anim-poke-stagger', sfx: 'woodblock', particles: ['🦯', '💢', '💨', '😤'], caption: 'Cốc cốc!' },
-  oldwoman: { anim: 'anim-poke-tickle', sfx: 'pop', particles: ['👓', '😲', '🧶', '✨'], caption: 'Ối giời!' },
-  kid: { anim: 'anim-poke-spin', sfx: 'boing', particles: ['🪨', '💨', '😜', '⭐'], caption: 'CHÍU!' },
-  youth: { anim: 'anim-poke-tickle', sfx: 'chime', particles: ['✨', '⚡', '😎', '🌟'], caption: 'Ngầu!' },
-  grocer: { anim: 'anim-poke-tickle', sfx: 'coin', particles: ['🪙', '📒', '💰', '✨'], caption: 'Tính sổ!' },
-  farmer: { anim: 'anim-poke-chop', sfx: 'chop', particles: ['🌾', '🌱', '🌾', '💦'], slash: true, caption: 'Phập!' },
-  baker: { anim: 'anim-poke-tickle', sfx: 'pop', particles: ['🥖', '🥐', '💨', '✨'], caption: 'Thơm lừng!' },
-  fisher: { anim: 'anim-poke-chop', sfx: 'splash', particles: ['🐟', '💦', '💧', '🐠'], caption: 'Búng!' },
-  tailor: { anim: 'anim-poke-tickle', sfx: 'scissor', particles: ['✂️', '🎀', '🧵', '✨'], caption: 'Xoẹt xoẹt!' },
-  lumberjack: { anim: 'anim-poke-chop', sfx: 'chop', particles: ['🪵', '💥', '🪓', '🍂'], slash: true, caption: 'CỐP!' },
-  herbalist: { anim: 'anim-poke-tickle', sfx: 'chime', particles: ['🌿', '✨', '🍃', '💚'], caption: 'Thơm mát!' },
-  watchman: { anim: 'anim-poke-chop', sfx: 'woodblock', particles: ['🏮', '✨', '🔔', '💛'], caption: 'CỐC CỐC!' },
-  shepherd: { anim: 'anim-poke-tickle', sfx: 'boing', particles: ['🐑', '💨', '🌿', '✨'], caption: 'Beee~' },
-};
+export { POKE_EFFECTS };
 
 const PARTICLE_VECTORS = [
   { dx: '-28px', dy: '-34px', rot: '-35deg' },
@@ -68,7 +46,7 @@ export default function PixelVillager({
   const isSleeping = alive && eyeState === 'sleep';
   const isWolfEyes = alive && eyeState === 'wolf';
 
-  const spriteSrc = alive ? `/assets/chars/${avatarId}.png` : '/assets/chars/ghost_tombstone.png';
+  const spriteSrc = alive ? ASSET_PATHS.character(avatarId) : ASSET_PATHS.ghostTombstone;
 
   const idleClass = !alive
     ? 'anim-ghost'

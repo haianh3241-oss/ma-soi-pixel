@@ -20,6 +20,8 @@ import ChatVoicePanel from './components/ChatVoicePanel.jsx';
 import GameOverModal from './components/GameOverModal.jsx';
 import AudioMixerModal from './components/AudioMixerModal.jsx';
 import RoleDeckModal from './components/RoleDeckModal.jsx';
+import ArtStudioPreview from './components/ArtStudioPreview.jsx';
+import RoleIcon from './components/RoleIcon.jsx';
 import { useVoiceChat } from './hooks/useVoiceChat.js';
 import { sfx } from './audio/sfx.js';
 
@@ -66,6 +68,10 @@ export default function App() {
   const [leaveConfirm, setLeaveConfirm] = useState(false);
   const [bagOpen, setBagOpen] = useState(false);
   const [selectedThrow, setSelectedThrow] = useState(null);
+  const [artStudioMode, setArtStudioMode] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('preview') === 'art';
+  });
 
   const [suspectTags, setSuspectTags] = useState({});
   const [activeReactions, setActiveReactions] = useState([]);
@@ -297,11 +303,26 @@ export default function App() {
     });
   };
 
+  if (artStudioMode) {
+    return (
+      <ArtStudioPreview
+        onExit={() => {
+          setArtStudioMode(false);
+          const params = new URLSearchParams(window.location.search);
+          if (params.get('preview') === 'art') {
+            window.history.replaceState({}, '', window.location.pathname);
+          }
+        }}
+      />
+    );
+  }
+
   if (!room) {
     return (
       <HomeScreen
         onCreateRoom={handleCreateRoom}
         onJoinRoom={handleJoinRoom}
+        onOpenArtStudio={() => setArtStudioMode(true)}
         initialCode={initialRoomCode}
       />
     );
@@ -395,7 +416,11 @@ export default function App() {
               className="sc-btn-blue px-2.5 py-2 text-xs"
               title="Xem vai trò của bạn"
             >
-              <span className="text-base leading-none">{myRoleDef?.icon || '👁️'}</span>
+              {myRoleDef ? (
+                <RoleIcon role={myRoleDef} className="w-5 h-5 shrink-0" emojiClass="text-base leading-none" />
+              ) : (
+                <span className="text-base leading-none">👁️</span>
+              )}
               <span className="hidden sm:inline">{myRoleDef?.name || 'Khán giả'}</span>
             </button>
             <button

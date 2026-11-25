@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Tag } from 'lucide-react';
 import { INTERACTIONS, PHASES, SUSPECT_TAGS } from '../../shared/constants.js';
+import { ARENA_LAYOUT, ASSET_PATHS } from '../../graphics-pack/themeConfig.js';
 import PixelVillager from './PixelVillager.jsx';
 import { formatCountdown, isWolfRole } from '../utils/helpers.js';
 import { sfx } from '../audio/sfx.js';
@@ -13,6 +14,8 @@ function formatClock(sec) {
 }
 
 function CampfireCenter({ isNight }) {
+  const [outMissing, setOutMissing] = useState(false);
+
   return (
     <div className="relative flex flex-col items-center justify-center select-none pointer-events-none">
       {isNight && (
@@ -31,20 +34,30 @@ function CampfireCenter({ isNight }) {
         </div>
       )}
 
-      <img
-        src="/assets/chars/campfire_lit.png"
-        alt="Đống lửa trại"
-        draggable={false}
-        className={`w-16 h-16 sm:w-24 sm:h-24 object-contain ${isNight ? 'anim-fire' : ''}`}
-        style={
-          isNight
-            ? undefined
-            : {
-                filter: 'brightness(0.42) saturate(0.15) contrast(1.15)',
-                opacity: 0.85,
-              }
-        }
-      />
+      {isNight || outMissing ? (
+        <img
+          src={ASSET_PATHS.campfireLit}
+          alt="Đống lửa trại"
+          draggable={false}
+          className={`w-16 h-16 sm:w-24 sm:h-24 object-contain ${isNight ? 'anim-fire' : ''}`}
+          style={
+            isNight
+              ? undefined
+              : {
+                  filter: 'brightness(0.42) saturate(0.15) contrast(1.15)',
+                  opacity: 0.85,
+                }
+          }
+        />
+      ) : (
+        <img
+          src={ASSET_PATHS.campfireOut}
+          alt="Đống lửa tắt"
+          draggable={false}
+          onError={() => setOutMissing(true)}
+          className="w-16 h-16 sm:w-24 sm:h-24 object-contain"
+        />
+      )}
     </div>
   );
 }
@@ -258,10 +271,14 @@ export default function VillageArena({
   // Safe ellipse aligned to the painted cobblestone plaza with padding for HUD corners
   const count = activePlayers.length;
   const compact = size.w < 640 || size.h < 540;
-  const baseSprite = compact ? 54 : size.w > 980 ? 84 : 68;
-  const rx = Math.max(105, Math.min(size.w * 0.31, size.w / 2 - 82));
-  const ry = Math.max(76, Math.min(size.h * 0.24, size.h / 2 - 108));
-  const centerYOffset = size.h * 0.04;
+  const baseSprite = compact
+    ? ARENA_LAYOUT.spriteSizeMobile
+    : size.w > 980
+      ? ARENA_LAYOUT.spriteSizeDesktop
+      : ARENA_LAYOUT.spriteSizeTablet;
+  const rx = Math.max(105, Math.min(size.w * ARENA_LAYOUT.ellipseRxRatio, size.w / 2 - 82));
+  const ry = Math.max(76, Math.min(size.h * ARENA_LAYOUT.ellipseRyRatio, size.h / 2 - 108));
+  const centerYOffset = size.h * ARENA_LAYOUT.centerYOffsetRatio;
 
   const myDayVote = me ? room.publicDayVotes?.[me.id]?.targetId : null;
   const myVerdictVote = me ? room.publicVerdictVotes?.[me.id]?.choice : null;
@@ -278,14 +295,14 @@ export default function VillageArena({
       <div
         className="pointer-events-none absolute inset-0 bg-cover bg-center transition-opacity duration-1000"
         style={{
-          backgroundImage: "url('/assets/bg_day.jpg')",
+          backgroundImage: `url('${ASSET_PATHS.dayBackground}')`,
           opacity: isNight ? 0 : 1,
         }}
       />
       <div
         className="pointer-events-none absolute inset-0 bg-cover bg-center transition-opacity duration-1000"
         style={{
-          backgroundImage: "url('/assets/bg_night.jpg')",
+          backgroundImage: `url('${ASSET_PATHS.nightBackground}')`,
           opacity: isNight ? 1 : 0,
         }}
       />

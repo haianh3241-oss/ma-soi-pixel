@@ -1,6 +1,7 @@
 import React from 'react';
 import { X } from 'lucide-react';
 import { ROLES } from '../../shared/constants.js';
+import RoleIcon from './RoleIcon.jsx';
 
 export default function RoleDeckModal({ room, onClose }) {
   const counts = room?.settings?.roleCounts || {};
@@ -39,7 +40,7 @@ export default function RoleDeckModal({ room, onClose }) {
         <div className="flex flex-col gap-2 overflow-y-auto pr-1">
           {activeRoles.map(({ role, count }) => (
             <div key={role.id} className="ggd-card-dark p-2.5 flex items-start gap-2.5">
-              <span className="text-2xl leading-none shrink-0 mt-0.5">{role.icon}</span>
+              <RoleIcon role={role} className="w-8 h-8 shrink-0 mt-0.5" emojiClass="text-2xl leading-none" />
               <div className="min-w-0 flex-1">
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-extrabold text-sm" style={{ color: role.color }}>

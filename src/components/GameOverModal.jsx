@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Trophy, RotateCcw, LogOut } from 'lucide-react';
 import { ROAST_STICKERS, ROLES } from '../../shared/constants.js';
 import PixelVillager from './PixelVillager.jsx';
+import RoleIcon from './RoleIcon.jsx';
 
 export default function GameOverModal({
   room,
@@ -98,8 +99,9 @@ export default function GameOverModal({
                         {isWinner && <span className="text-xs">🏆</span>}
                         {p.isLover && <span className="text-xs">💘</span>}
                       </div>
-                      <div className="text-xs font-bold" style={{ color: role.color }}>
-                        {role.icon} {role.name}
+                      <div className="text-xs font-bold flex items-center gap-1 flex-wrap" style={{ color: role.color }}>
+                        <RoleIcon role={role} className="w-4 h-4 shrink-0" emojiClass="text-sm leading-none" />
+                        <span>{role.name}</span>
                         {p.originalRole && p.originalRole !== p.role && (
                           <span className="text-[10px] text-red-300 ml-1">
                             (Bị nguyền từ {ROLES[p.originalRole]?.name})

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Eye, EyeOff, ShieldAlert, Heart } from 'lucide-react';
 import { ROLES, PHASES } from '../../shared/constants.js';
+import RoleIcon from './RoleIcon.jsx';
 
 export default function RolePanel({ room, me, onRevealMayor }) {
   const [hidden, setHidden] = useState(false);
@@ -58,7 +59,7 @@ export default function RolePanel({ room, me, onRevealMayor }) {
         <div className="px-panel-dark p-2.5 flex flex-col gap-1.5 text-xs">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
-              <span className="text-xl leading-none">{roleDef.icon}</span>
+              <RoleIcon role={roleDef} className="w-7 h-7 shrink-0" emojiClass="text-xl leading-none" />
               <div>
                 <div className="font-pixel-title text-sm" style={{ color: roleDef.color }}>
                   {roleDef.name}
