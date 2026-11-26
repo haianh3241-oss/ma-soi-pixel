@@ -1,17 +1,20 @@
 @import "tailwindcss";
 
 :root {
-  --panel-bg: rgba(24, 30, 54, 0.94);
-  --panel-dark: rgba(14, 18, 34, 0.92);
-  --ink: #0b0d17;
-  --gold: #fbbf24;
-  --text: #f8fafc;
+  --panel-bg: rgba(39, 33, 31, 0.96);
+  --panel-dark: rgba(24, 19, 18, 0.94);
+  --parchment: #f6ecd9;
+  --parchment-deep: #e4cda8;
+  --ink: #191413;
+  --gold: #f2b84b;
+  --terracotta: #d65539;
+  --text: #fff7ea;
 }
 
 html,
 body {
   min-height: 100%;
-  background: #0d1224;
+  background: #171211;
   color: var(--text);
   font-family: 'Nunito', 'Be Vietnam Pro', system-ui, sans-serif;
   overflow-x: hidden;
@@ -37,16 +40,16 @@ body {
 }
 
 /* =========================================================
-   SUPERCELL / WOLVESVILLE GLOSSY 2D UI CLASSES
+   FOLK WOOD / PARCHMENT / VERMILION UI CLASSES ("SỔ NHÂN VẬT")
    ========================================================= */
 
 .px-panel,
 .ggd-card {
-  background: linear-gradient(180deg, rgba(33, 41, 74, 0.96) 0%, rgba(20, 25, 46, 0.96) 100%);
+  background: linear-gradient(180deg, rgba(48, 40, 37, 0.97) 0%, rgba(28, 22, 20, 0.97) 100%);
   border: 3px solid var(--ink);
   box-shadow:
-    inset 0 2px 0 rgba(255, 255, 255, 0.16),
-    0 6px 0 rgba(8, 10, 18, 0.65);
+    inset 0 2px 0 rgba(255, 232, 198, 0.14),
+    0 6px 0 rgba(12, 9, 8, 0.72);
   border-radius: 18px;
 }
 
@@ -54,15 +57,22 @@ body {
 .ggd-card-dark {
   background: var(--panel-dark);
   border: 2.5px solid var(--ink);
-  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.45);
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.48);
   border-radius: 14px;
+}
+
+.folk-parchment {
+  background: linear-gradient(180deg, #faf3e6 0%, #ead6b4 100%);
+  color: #262121;
+  border: 2.5px solid #262121;
+  box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.65), 0 3px 0 rgba(20, 15, 13, 0.45);
 }
 
 .px-btn,
 .ggd-btn {
   border: 2.5px solid var(--ink);
   box-shadow:
-    inset 0 2.5px 0 rgba(255, 255, 255, 0.35),
+    inset 0 2.5px 0 rgba(255, 248, 232, 0.34),
     0 4px 0 var(--ink);
   border-radius: 13px;
   cursor: pointer;
@@ -78,7 +88,7 @@ body {
 
 .px-btn:hover:not(:disabled),
 .ggd-btn:hover:not(:disabled) {
-  filter: brightness(1.08);
+  filter: brightness(1.07);
 }
 
 .px-btn:active:not(:disabled),
@@ -94,23 +104,23 @@ body {
 }
 
 .sc-timer-pill {
-  background: linear-gradient(180deg, #24305c 0%, #131932 100%);
-  border: 3px solid #090b14;
+  background: linear-gradient(180deg, #3c2f2b 0%, #201816 100%);
+  border: 3px solid #140f0e;
   box-shadow:
-    inset 0 2px 0 rgba(255, 255, 255, 0.22),
-    0 5px 0 rgba(7, 9, 16, 0.75);
+    inset 0 2px 0 rgba(255, 235, 198, 0.2),
+    0 5px 0 rgba(10, 7, 6, 0.8);
   border-radius: 999px;
 }
 
 .sc-btn-blue {
-  background: linear-gradient(180deg, #56b6ff 0%, #206ee0 100%);
-  border: 3px solid #090b14;
+  background: linear-gradient(180deg, #4fa9eb 0%, #236cb8 100%);
+  border: 3px solid #140f0e;
   box-shadow:
-    inset 0 3px 0 rgba(255, 255, 255, 0.48),
-    0 4px 0 #090b14;
+    inset 0 3px 0 rgba(255, 255, 255, 0.42),
+    0 4px 0 #140f0e;
   border-radius: 14px;
   color: #ffffff;
-  text-shadow: 0 2px 0 rgba(9, 11, 20, 0.75);
+  text-shadow: 0 2px 0 rgba(16, 12, 11, 0.8);
   cursor: pointer;
   font-family: 'Be Vietnam Pro', 'Nunito', sans-serif;
   font-weight: 900;
@@ -122,18 +132,18 @@ body {
 }
 
 .sc-btn-orange {
-  background: linear-gradient(180deg, #ffbe3b 0%, #eb6b0c 100%);
-  border: 3px solid #090b14;
+  background: linear-gradient(180deg, #f3a63b 0%, #d65539 100%);
+  border: 3px solid #140f0e;
   box-shadow:
-    inset 0 3px 0 rgba(255, 255, 255, 0.55),
-    0 5px 0 #090b14;
+    inset 0 3px 0 rgba(255, 245, 218, 0.5),
+    0 5px 0 #140f0e;
   border-radius: 14px;
   color: #ffffff;
   text-shadow:
-    -1px -1px 0 #090b14,
-    1px -1px 0 #090b14,
-    -1px 1px 0 #090b14,
-    1px 2px 0 #090b14;
+    -1px -1px 0 #140f0e,
+    1px -1px 0 #140f0e,
+    -1px 1px 0 #140f0e,
+    1px 2px 0 #140f0e;
   cursor: pointer;
   font-family: 'Be Vietnam Pro', 'Nunito', sans-serif;
   font-weight: 900;
@@ -147,7 +157,7 @@ body {
 .sc-btn-blue:hover:not(:disabled),
 .sc-btn-orange:hover:not(:disabled),
 .sc-btn-mic:hover:not(:disabled) {
-  filter: brightness(1.08);
+  filter: brightness(1.07);
 }
 
 .sc-btn-blue:active:not(:disabled),
@@ -157,10 +167,10 @@ body {
 }
 
 .sc-btn-mic {
-  border: 3.5px solid #090b14;
+  border: 3.5px solid #140f0e;
   box-shadow:
-    inset 0 0 0 3px rgba(255, 255, 255, 0.35),
-    0 5px 0 #090b14;
+    inset 0 0 0 3px rgba(255, 244, 224, 0.32),
+    0 5px 0 #140f0e;
   border-radius: 999px;
   cursor: pointer;
   display: flex;
@@ -170,25 +180,25 @@ body {
 }
 
 .sc-nameplate {
-  background: rgba(16, 18, 28, 0.94);
-  border: 2.5px solid #080910;
-  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.6);
+  background: rgba(24, 19, 17, 0.94);
+  border: 2.5px solid #110d0c;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.65);
   border-radius: 999px;
 }
 
 .sc-zzz-bubble {
-  background: #ffffff;
-  color: #13182e;
-  border: 2.5px solid #090b14;
-  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.45);
+  background: #faf3e6;
+  color: #262121;
+  border: 2.5px solid #262121;
+  box-shadow: 0 3px 0 rgba(16, 12, 11, 0.5);
   border-radius: 999px;
   font-weight: 900;
 }
 
 .px-input {
-  background: #0e1324;
+  background: #171211;
   color: var(--text);
-  border: 2.5px solid #353e63;
+  border: 2.5px solid #4d3f3a;
   border-radius: 10px;
   padding: 8px 12px;
   font-family: 'Nunito', sans-serif;
@@ -206,23 +216,46 @@ body {
   height: 7px;
 }
 ::-webkit-scrollbar-track {
-  background: #14182b;
+  background: #1a1413;
 }
 ::-webkit-scrollbar-thumb {
-  background: #444e78;
+  background: #5c4b45;
   border-radius: 99px;
 }
 
 /* =========================================================
-   2D CARTOON ANIMATIONS
+   CHARACTER MOTION & STADIUM ANIMATIONS
    ========================================================= */
+
+@keyframes seatEnter {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -40%) scale(0.76);
+  }
+  70% {
+    opacity: 1;
+    transform: translate(-50%, -52%) scale(1.04);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+@keyframes arenaShake {
+  0%, 100% { transform: translate(0, 0); }
+  20% { transform: translate(-4px, 3px); }
+  45% { transform: translate(4px, -3px); }
+  70% { transform: translate(-3px, -2px); }
+  85% { transform: translate(2px, 2px); }
+}
 
 @keyframes soulBounce {
   0%, 100% {
     transform: translateY(0) scaleX(1) scaleY(1);
   }
   50% {
-    transform: translateY(-2px) scaleX(1.025) scaleY(0.965);
+    transform: translateY(-2px) scaleX(1.02) scaleY(0.97);
   }
 }
 
@@ -231,43 +264,43 @@ body {
     transform: translateY(0) scale(1);
   }
   25% {
-    transform: translateY(-4px) scale(1.03, 0.98);
+    transform: translateY(-3.5px) scale(1.025, 0.98);
   }
   50% {
-    transform: translateY(0) scale(0.99, 1.02);
+    transform: translateY(0) scale(0.99, 1.015);
   }
   75% {
-    transform: translateY(-3px) scale(1.02, 0.98);
+    transform: translateY(-2.5px) scale(1.02, 0.985);
   }
 }
 
 @keyframes sleepNod {
   0%, 100% {
-    transform: translateY(0) scaleY(1) rotate(-1.5deg);
+    transform: translateY(0) scaleY(1) rotate(-1deg);
   }
   50% {
-    transform: translateY(2px) scaleX(1.03) scaleY(0.95) rotate(2deg);
+    transform: translateY(2px) scaleX(1.025) scaleY(0.96) rotate(1.5deg);
   }
 }
 
 @keyframes ghostFloat {
-  0%, 100% { transform: translateY(0); opacity: 0.85; }
-  50% { transform: translateY(-7px); opacity: 0.98; }
+  0%, 100% { transform: translateY(0); opacity: 0.9; }
+  50% { transform: translateY(-7px); opacity: 1; }
 }
 
 @keyframes campfireFlicker {
   0%, 100% {
     transform: scale(1) translateY(0);
-    filter: drop-shadow(0 0 18px rgba(251, 146, 60, 0.9));
+    filter: drop-shadow(0 0 18px rgba(251, 146, 60, 0.85));
   }
   50% {
-    transform: scale(1.05) translateY(-2px);
-    filter: drop-shadow(0 0 28px rgba(250, 204, 21, 1));
+    transform: scale(1.045) translateY(-2px);
+    filter: drop-shadow(0 0 28px rgba(250, 204, 21, 0.98));
   }
 }
 
 @keyframes smokeRise {
-  0% { transform: translateY(0) scale(0.75); opacity: 0.75; }
+  0% { transform: translateY(0) scale(0.75); opacity: 0.72; }
   100% { transform: translateY(-24px) translateX(6px) scale(1.5); opacity: 0; }
 }
 
@@ -278,30 +311,27 @@ body {
 
 @keyframes pokeTickle {
   0%, 100% { transform: rotate(0deg) scale(1); }
-  20% { transform: rotate(-10deg) scale(1.1); }
-  40% { transform: rotate(10deg) scale(1.12); }
-  60% { transform: rotate(-8deg) scale(1.08); }
-  80% { transform: rotate(6deg) scale(1.04); }
+  20% { transform: rotate(-6deg) scale(1.06); }
+  45% { transform: rotate(6deg) scale(1.08); }
+  75% { transform: rotate(-3deg) scale(1.03); }
 }
 
 @keyframes pokeChop {
-  0% { transform: translateY(0) rotate(0deg); }
-  25% { transform: translateY(-10px) rotate(-12deg) scale(1.09); }
-  55% { transform: translateY(6px) rotate(8deg) scale(1.05); }
-  100% { transform: translateY(0) rotate(0deg); }
+  0% { transform: translateY(0); }
+  30% { transform: translateY(-6px) scale(1.06); }
+  60% { transform: translateY(4px) scale(1.04); }
+  100% { transform: translateY(0); }
 }
 
 @keyframes pokeStagger {
   0%, 100% { transform: translateX(0) rotate(0deg); }
-  25% { transform: translateX(-7px) rotate(-14deg); }
-  55% { transform: translateX(7px) rotate(14deg); }
-  80% { transform: translateX(-3px) rotate(-5deg); }
+  30% { transform: translateX(-5px) rotate(-6deg); }
+  65% { transform: translateX(5px) rotate(6deg); }
 }
 
 @keyframes pokeSpin {
-  0% { transform: rotate(0deg) scale(1); }
-  50% { transform: rotate(180deg) scale(1.15); }
-  100% { transform: rotate(360deg) scale(1); }
+  0%, 100% { transform: translateY(0) scale(1); }
+  45% { transform: translateY(-10px) scale(1.09); }
 }
 
 @keyframes particleBurst {
@@ -337,17 +367,19 @@ body {
   100% { transform: translate(var(--to-x), var(--to-y)) scale(1.7) rotate(360deg); opacity: 0; }
 }
 
-.anim-soul-idle { animation: soulBounce 1.8s ease-in-out infinite; transform-origin: bottom center; }
-.anim-talk-active { animation: talkBounce 0.48s ease-in-out infinite; transform-origin: bottom center; }
-.anim-sleep-nod { animation: sleepNod 2.8s ease-in-out infinite; transform-origin: bottom center; }
-.anim-ghost { animation: ghostFloat 2.1s ease-in-out infinite; }
+.anim-seat-enter { animation: seatEnter 0.42s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+.anim-arena-shake { animation: arenaShake 0.16s ease-in-out; }
+.anim-soul-idle { animation: soulBounce 2s ease-in-out infinite; transform-origin: bottom center; }
+.anim-talk-active { animation: talkBounce 0.42s ease-in-out infinite; transform-origin: bottom center; }
+.anim-sleep-nod { animation: sleepNod 3.1s ease-in-out infinite; transform-origin: bottom center; }
+.anim-ghost { animation: ghostFloat 2.3s ease-in-out infinite; }
 .anim-fire { animation: campfireFlicker 0.6s ease-in-out infinite; }
-.anim-smoke { animation: smokeRise 1.8s ease-out infinite; }
+.anim-smoke { animation: smokeRise 1.9s ease-out infinite; }
 .anim-zzz { animation: zzzFloat 2s ease-in-out infinite; }
 .anim-poke-tickle { animation: pokeTickle 0.55s ease-in-out; }
 .anim-poke-chop { animation: pokeChop 0.5s ease-out; }
 .anim-poke-stagger { animation: pokeStagger 0.65s ease-in-out; }
-.anim-poke-spin { animation: pokeSpin 0.55s ease-out; }
+.anim-poke-spin { animation: pokeSpin 0.55s cubic-bezier(0.34, 1.56, 0.64, 1); }
 .anim-reaction { animation: floatReaction 2s ease-out forwards; }
 .anim-chat-bubble { animation: chatBubblePop 4.2s ease-out forwards; }
 
@@ -356,5 +388,5 @@ body {
 }
 
 .wolf-eye-glow {
-  filter: drop-shadow(0 0 8px rgba(239, 68, 68, 0.95)) drop-shadow(0 0 16px rgba(239, 68, 68, 0.7));
+  filter: drop-shadow(0 0 8px rgba(239, 68, 68, 0.95)) drop-shadow(0 0 16px rgba(239, 68, 68, 0.72));
 }

@@ -3,6 +3,7 @@ import { Tag } from 'lucide-react';
 import { INTERACTIONS, PHASES, SUSPECT_TAGS } from '../../shared/constants.js';
 import { ARENA_LAYOUT, ASSET_PATHS } from '../../graphics-pack/themeConfig.js';
 import PixelVillager from './PixelVillager.jsx';
+import { preloadRoomVillagers } from '../data/villagerMotion.js';
 import { formatCountdown, isWolfRole } from '../utils/helpers.js';
 import { sfx } from '../audio/sfx.js';
 
@@ -92,6 +93,10 @@ export default function VillageArena({
   const [cupidPick, setCupidPick] = useState([]);
   const [curseToggle, setCurseToggle] = useState(false);
   const [witchMode, setWitchMode] = useState('idle');
+  const [emoteTriggers, setEmoteTriggers] = useState({});
+  const [arenaShake, setArenaShake] = useState(false);
+  const seenProjectilesRef = useRef(new Set());
+  const prevDefenseKeyRef = useRef(null);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -112,6 +117,43 @@ export default function VillageArena({
   const secondsLeft = formatCountdown(room.phaseEndsAt, nowMs);
   const activePlayers = useMemo(() => room.players.filter((p) => !p.isSpectator), [room.players]);
   const alivePlayers = useMemo(() => activePlayers.filter((p) => p.alive), [activePlayers]);
+
+  // Preload WebP & Sleep PNG for players actively in this room
+  useEffect(() => {
+    preloadRoomVillagers(activePlayers.map((p) => p.avatarId));
+  }, [activePlayers]);
+
+  // Trigger hit-emote when throwable projectile lands (~720ms flight impact)
+  useEffect(() => {
+    const timers = [];
+    for (const proj of projectiles || []) {
+      if (!proj?.id || seenProjectilesRef.current.has(proj.id)) continue;
+      seenProjectilesRef.current.add(proj.id);
+      if (proj.toId) {
+        const t = setTimeout(() => {
+          setEmoteTriggers((prev) => ({ ...prev, [proj.toId]: (prev[proj.toId] || 0) + 1 }));
+        }, 720);
+        timers.push(t);
+      }
+    }
+    return () => timers.forEach(clearTimeout);
+  }, [projectiles]);
+
+  // Trigger defense plea emote when an accused player steps forward
+  useEffect(() => {
+    const key = room.phase === PHASES.DAY_DEFENSE && room.accusedId ? `${room.dayCount}-${room.accusedId}` : null;
+    if (key && prevDefenseKeyRef.current !== key) {
+      prevDefenseKeyRef.current = key;
+      setEmoteTriggers((prev) => ({ ...prev, [room.accusedId]: (prev[room.accusedId] || 0) + 1 }));
+    } else if (!key) {
+      prevDefenseKeyRef.current = null;
+    }
+  }, [room.phase, room.dayCount, room.accusedId]);
+
+  const triggerHeavyShake = () => {
+    setArenaShake(true);
+    setTimeout(() => setArenaShake(false), 180);
+  };
 
   const skipVotes = room.skipVotes || [];
   const iSkipped = me ? skipVotes.includes(me.id) : false;
@@ -289,7 +331,7 @@ export default function VillageArena({
     <div
       ref={containerRef}
       onClick={() => setTagPickerFor(null)}
-      className="relative w-full h-full overflow-hidden select-none bg-[#0d1224]"
+      className={`relative w-full h-full overflow-hidden select-none bg-[#171211] ${arenaShake ? 'anim-arena-shake' : ''}`}
     >
       {/* LAYER 1: Full-Bleed Crossfading Painted 2.5D Day & Night Backgrounds */}
       <div
@@ -431,8 +473,9 @@ export default function VillageArena({
               top: `calc(50% + ${centerYOffset + y}px)`,
               transform: `translate(-50%, -50%) scale(${depthScale})`,
               zIndex: tagPickerFor === p.id ? 110 : zOrder,
+              animationDelay: `${Math.min(idx * 45, 650)}ms`,
             }}
-            className="absolute flex flex-col items-center"
+            className="absolute flex flex-col items-center anim-seat-enter"
           >
             {bubble && (
               <div
@@ -471,7 +514,10 @@ export default function VillageArena({
                 eyeState={getEyeState(p)}
                 isSpeaking={isSpeaking}
                 isAccused={isAccused}
+                emoteKey={emoteTriggers[p.id] ?? null}
+                staggerIndex={idx}
                 enablePoke={true}
+                onHeavyImpact={triggerHeavyShake}
               />
 
               <button

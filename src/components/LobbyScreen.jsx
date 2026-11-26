@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Copy, Check, Plus, Trash2, Bot, Play, Sparkles, ScrollText, Mic, MicOff, Send, LogOut, X } from 'lucide-react';
 import { ROLES, VILLAGERS } from '../../shared/constants.js';
 import { ASSET_PATHS, BRAND } from '../../graphics-pack/themeConfig.js';
+import { getVillagerMotion } from '../data/villagerMotion.js';
 import PixelVillager from './PixelVillager.jsx';
 import RoleIcon from './RoleIcon.jsx';
 
@@ -11,6 +12,7 @@ export function HomeScreen({ onCreateRoom, onJoinRoom, onOpenArtStudio, initialC
   const [will, setWill] = useState(() => localStorage.getItem('masoi_will') || '');
   const [joinCode, setJoinCode] = useState(initialCode);
   const [error, setError] = useState('');
+  const [previewEmoteKey, setPreviewEmoteKey] = useState(null);
 
   const saveLocal = () => {
     localStorage.setItem('masoi_name', name.trim() || 'Dân Làng');
@@ -37,44 +39,65 @@ export function HomeScreen({ onCreateRoom, onJoinRoom, onOpenArtStudio, initialC
   };
 
   const selectedVillager = VILLAGERS.find((v) => v.id === avatarId) || VILLAGERS[0];
+  const selectedMotion = getVillagerMotion(selectedVillager.id);
 
   return (
     <div
       className="min-h-dvh w-full bg-cover bg-center bg-fixed p-3 md:p-6 flex items-center justify-center relative"
       style={{
-        backgroundImage: `linear-gradient(rgba(10,14,28,0.72), rgba(10,14,28,0.82)), url('${ASSET_PATHS.lobbyBackground}')`,
+        backgroundImage: `linear-gradient(rgba(20,15,13,0.72), rgba(16,12,10,0.86)), url('${ASSET_PATHS.lobbyBackground}')`,
       }}
     >
       <div className="w-full max-w-4xl flex flex-col gap-4 my-auto">
         {/* Header */}
         <div className="text-center flex flex-col items-center gap-1">
-          <div className="inline-flex items-center gap-2 rounded-full bg-amber-400/20 border border-amber-400/50 px-3.5 py-1 text-xs font-extrabold text-amber-300 backdrop-blur-xs">
+          <div className="inline-flex items-center gap-2 rounded-full bg-[#d65539]/25 border border-[#f2b84b]/60 px-3.5 py-1 text-xs font-extrabold text-amber-200 backdrop-blur-xs">
             <span>🐺 {BRAND.badge}</span>
             <span>•</span>
             <span>VOICE CHAT SẢNH CHỜ & TRONG VÁN</span>
           </div>
-          <h1 className="font-brand text-4xl md:text-5xl text-amber-300 drop-shadow-[0_4px_0_#111322] mt-1">
+          <h1 className="font-brand text-4xl md:text-5xl text-[#f2b84b] drop-shadow-[0_4px_0_#140f0e] mt-1">
             {BRAND.title}
           </h1>
-          <p className="text-xs md:text-sm text-slate-300">
+          <p className="text-xs md:text-sm text-amber-100/80">
             11 Vai trò mở rộng • Ẩn role người chết • Ném đồ cà khịa • Chơi ngay không cần tài khoản
           </p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
-          {/* Left: Character & Pre-game Will */}
+          {/* Left: Character & Pre-game Will ("Sổ Nhân Vật") */}
           <div className="md:col-span-7 px-panel p-3.5 flex flex-col gap-3">
-            <div className="flex items-center gap-3 px-panel-dark p-2.5">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3 folk-parchment rounded-xl p-2.5">
               <div
-                className="rounded border-2 border-black p-1.5 shrink-0"
-                style={{ background: selectedVillager.bg }}
-                title="Chạm thử vào nhân vật!"
+                className="rounded-xl border-2 border-[#262121] bg-[#e4cda8] p-1 shrink-0 self-center sm:self-auto flex items-center justify-center"
+                title="Chạm thử hoặc bấm Diễn thử!"
               >
-                <PixelVillager avatarId={selectedVillager.id} size={64} enablePoke={true} />
+                <PixelVillager
+                  avatarId={selectedVillager.id}
+                  size={84}
+                  emoteKey={previewEmoteKey}
+                  enablePoke={true}
+                />
               </div>
               <div className="flex-1 min-w-0 flex flex-col gap-1.5">
-                <div className="text-xs font-bold text-amber-300 truncate">
-                  {selectedVillager.name} <span className="text-slate-400 font-normal">({selectedVillager.tag})</span>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="text-sm font-black text-[#262121] truncate">
+                      {selectedVillager.name}
+                    </div>
+                    <div className="text-[11px] font-semibold text-[#67584a] truncate">
+                      {selectedVillager.tag} • <span className="text-[#9f3822]">{selectedMotion.reaction}</span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setPreviewEmoteKey((k) => (k || 0) + 1)}
+                    className="px-btn bg-[#d65539] text-white px-2.5 py-1.5 text-[11px] shrink-0"
+                    title="Xem nhân vật diễn hoạt"
+                  >
+                    <Play className="w-3 h-3" />
+                    <span>Diễn thử</span>
+                  </button>
                 </div>
                 <input
                   type="text"
@@ -90,10 +113,10 @@ export function HomeScreen({ onCreateRoom, onJoinRoom, onOpenArtStudio, initialC
               </div>
             </div>
 
-            {/* 21 Villagers Grid */}
+            {/* 22 Villagers Grid ("Sổ Nhân Vật Dân Làng") */}
             <div>
-              <div className="text-[11px] font-bold uppercase text-slate-300 mb-1.5">
-                Chọn Dân Làng Pixel ({VILLAGERS.length} nhân vật):
+              <div className="text-[11px] font-bold uppercase text-amber-200/90 mb-1.5">
+                Sổ Nhân Vật Dân Làng ({VILLAGERS.length} gương mặt):
               </div>
               <div className="grid grid-cols-4 sm:grid-cols-7 gap-1.5 max-h-52 overflow-y-auto p-1">
                 {VILLAGERS.map((v) => {
@@ -102,16 +125,19 @@ export function HomeScreen({ onCreateRoom, onJoinRoom, onOpenArtStudio, initialC
                     <button
                       key={v.id}
                       type="button"
-                      onClick={() => setAvatarId(v.id)}
-                      className={`flex flex-col items-center p-1.5 rounded border-2 transition cursor-pointer ${
+                      onClick={() => {
+                        setAvatarId(v.id);
+                        setPreviewEmoteKey(null);
+                      }}
+                      className={`flex flex-col items-center p-1.5 rounded-xl border-2 transition cursor-pointer ${
                         active
-                          ? 'border-amber-400 bg-amber-500/20 scale-[1.03]'
-                          : 'border-[#2f2742] bg-[#161221] hover:border-slate-500'
+                          ? 'border-[#d65539] bg-[#faf3e6] text-[#262121] scale-[1.04] shadow-md'
+                          : 'border-[#3e322e] bg-[#efe5d2]/95 text-[#262121] hover:bg-[#faf3e6] hover:border-[#f2b84b]'
                       }`}
                       title={`${v.name} — ${v.tag}`}
                     >
-                      <PixelVillager avatarId={v.id} size={38} animate={active} />
-                      <span className="mt-1 text-[9.5px] leading-tight text-center line-clamp-1 w-full text-slate-200">
+                      <PixelVillager avatarId={v.id} size={40} still={true} />
+                      <span className="mt-1 text-[9.5px] font-bold leading-tight text-center line-clamp-1 w-full">
                         {v.name}
                       </span>
                     </button>
@@ -253,7 +279,7 @@ export default function LobbyScreen({
     <div
       className="flex-1 w-full bg-cover bg-center bg-fixed p-2.5 md:p-4"
       style={{
-        backgroundImage: `linear-gradient(rgba(10,14,28,0.74), rgba(10,14,28,0.84)), url('${ASSET_PATHS.lobbyBackground}')`,
+        backgroundImage: `linear-gradient(rgba(20,15,13,0.72), rgba(16,12,10,0.84)), url('${ASSET_PATHS.lobbyBackground}')`,
       }}
     >
       <div className="max-w-6xl mx-auto flex flex-col gap-3 pb-6">
@@ -413,11 +439,11 @@ export default function LobbyScreen({
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       )}
-                      <PixelVillager avatarId={p.avatarId} size={46} />
+                      <PixelVillager avatarId={p.avatarId} size={56} enablePoke={true} staggerIndex={0} />
                       <div className="mt-1 text-xs font-bold truncate max-w-full text-center">
                         {p.name}
                       </div>
-                      <div className="text-[10px] text-slate-400 truncate max-w-full">{v.name}</div>
+                      <div className="text-[10px] text-amber-200/70 truncate max-w-full">{v.name}</div>
                     </div>
                   );
                 })}
@@ -456,12 +482,14 @@ export default function LobbyScreen({
                     key={v.id}
                     type="button"
                     onClick={() => onUpdateProfile({ avatarId: v.id })}
-                    className={`shrink-0 p-1 rounded border cursor-pointer ${
-                      me?.avatarId === v.id ? 'border-amber-400 bg-amber-500/20' : 'border-[#332b47] bg-[#161221]'
+                    className={`shrink-0 p-1 rounded-lg border-2 cursor-pointer ${
+                      me?.avatarId === v.id
+                        ? 'border-[#d65539] bg-[#faf3e6]'
+                        : 'border-[#3e322e] bg-[#efe5d2]/90 hover:bg-[#faf3e6]'
                     }`}
                     title={v.name}
                   >
-                    <PixelVillager avatarId={v.id} size={32} animate={false} />
+                    <PixelVillager avatarId={v.id} size={34} still={true} />
                   </button>
                 ))}
               </div>

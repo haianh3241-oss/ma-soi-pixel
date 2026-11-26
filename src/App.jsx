@@ -335,9 +335,9 @@ export default function App() {
     <div className={inGame ? 'relative w-full h-dvh overflow-hidden' : 'min-h-dvh w-full flex flex-col'}>
       {room.phase === PHASES.LOBBY ? (
         <div className="flex flex-col min-h-dvh">
-          <header className="sticky top-0 z-30 px-3 h-12 bg-[#161a2d] border-b-2 border-[#0b0d17] flex items-center justify-between shrink-0">
+          <header className="sticky top-0 z-30 px-3 h-12 bg-[#1c1614] border-b-2 border-[#110d0c] flex items-center justify-between shrink-0">
             <div className="flex items-center gap-2">
-              <span className="font-brand text-sm sm:text-base text-amber-300">🐺 MA CHÓ</span>
+              <span className="font-brand text-sm sm:text-base text-[#f2b84b]">🐺 MA CHÓ</span>
               <span
                 className={`w-2.5 h-2.5 rounded-full ${connected ? 'bg-emerald-400' : 'bg-red-500 animate-ping'}`}
               />
@@ -345,7 +345,7 @@ export default function App() {
             <button
               type="button"
               onClick={() => setMixerOpen(true)}
-              className="ggd-btn bg-[#272f52] px-3 py-1.5 text-xs text-slate-100"
+              className="ggd-btn bg-[#332926] px-3 py-1.5 text-xs text-amber-100"
               title="Điều chỉnh Nhạc nền, Hiệu ứng & Voice"
             >
               <SlidersHorizontal className="w-3.5 h-3.5 text-amber-300" />

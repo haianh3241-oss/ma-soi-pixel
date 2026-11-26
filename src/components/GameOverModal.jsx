@@ -92,7 +92,7 @@ export default function GameOverModal({
                   }`}
                 >
                   <div className="flex items-center gap-3">
-                    <PixelVillager avatarId={p.avatarId} alive={p.alive} size={48} animate={false} />
+                    <PixelVillager avatarId={p.avatarId} alive={p.alive} size={52} still={true} />
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5">
                         <span className="font-bold text-sm truncate">{p.name}</span>

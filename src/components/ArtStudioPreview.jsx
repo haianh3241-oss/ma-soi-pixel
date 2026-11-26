@@ -1,7 +1,8 @@
 import React, { useMemo, useState } from 'react';
-import { ArrowLeft, Sun, Moon, Users, Eye, Sparkles, Grid, Sliders } from 'lucide-react';
+import { ArrowLeft, Sun, Moon, Users, Eye, Sparkles, Grid, Sliders, Play } from 'lucide-react';
 import { ROLES, VILLAGERS } from '../../shared/constants.js';
 import { ARENA_LAYOUT, ASSET_PATHS } from '../../graphics-pack/themeConfig.js';
+import { getVillagerMotion } from '../data/villagerMotion.js';
 import PixelVillager from './PixelVillager.jsx';
 import RoleIcon from './RoleIcon.jsx';
 
@@ -11,6 +12,8 @@ export default function ArtStudioPreview({ onExit }) {
   const [playerCount, setPlayerCount] = useState(8);
   const [eyeMode, setEyeMode] = useState('mixed'); // 'mixed' | 'awake' | 'sleep' | 'wolf' | 'dead'
   const [assetBg, setAssetBg] = useState('checker'); // 'checker' | 'dark' | 'light'
+  const [globalEmoteKey, setGlobalEmoteKey] = useState(null);
+  const [assetPreviewState, setAssetPreviewState] = useState('idle'); // 'idle' | 'still' | 'sleep'
 
   // Live Arena Layout Sliders (matching themeConfig.js ARENA_LAYOUT)
   const [centerYRatio, setCenterYRatio] = useState(ARENA_LAYOUT.centerYOffsetRatio);
@@ -112,10 +115,9 @@ export default function ArtStudioPreview({ onExit }) {
               style={{ top: `calc(50% + ${centerYRatio * 100}%)` }}
             >
               <img
-                src={ASSET_PATHS.campfireLit}
+                src={isNight ? ASSET_PATHS.campfireLit : ASSET_PATHS.campfireOut}
                 alt="Campfire"
                 className={`w-20 h-20 object-contain ${isNight ? 'anim-fire' : ''}`}
-                style={isNight ? undefined : { filter: 'brightness(0.42) saturate(0.15)' }}
               />
             </div>
 
@@ -145,6 +147,8 @@ export default function ArtStudioPreview({ onExit }) {
                     size={spriteSize}
                     isNight={isNight}
                     eyeState={p.eyeState}
+                    emoteKey={globalEmoteKey}
+                    staggerIndex={idx}
                     enablePoke={true}
                   />
                   <span className="sc-nameplate mt-0.5 px-2.5 py-0.5 text-[10px] font-extrabold text-white whitespace-nowrap">
@@ -206,6 +210,14 @@ export default function ArtStudioPreview({ onExit }) {
                 <option value="wolf">Tất cả mắt đỏ Sói</option>
                 <option value="dead">Xen kẽ Bia mộ Hồn ma</option>
               </select>
+
+              <button
+                type="button"
+                onClick={() => setGlobalEmoteKey((k) => (k || 0) + 1)}
+                className="ggd-btn bg-[#d65539] text-white py-2 text-xs mt-1"
+              >
+                <Play className="w-3.5 h-3.5" /> Diễn thử cả sân (Emote)
+              </button>
             </div>
 
             <div className="ggd-card-dark p-2.5 flex flex-col gap-2 text-xs">
@@ -304,23 +316,54 @@ export default function ArtStudioPreview({ onExit }) {
 
           {/* 22 Characters */}
           <section>
-            <h2 className="font-brand text-sm text-amber-300 mb-2">
-              1. BỘ 22 DÂN LÀNG (graphics-pack/assets/characters/&lt;id&gt;.png)
-            </h2>
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+              <h2 className="font-brand text-sm text-amber-300">
+                1. BỘ 22 DÂN LÀNG (graphics-pack/assets/ma-cho/&lt;slug&gt;/)
+              </h2>
+              <div className="flex gap-1 text-[11px]">
+                {[
+                  ['idle', 'Idle WebP'],
+                  ['still', 'Icon 112px'],
+                  ['sleep', 'Ngủ (sleep.png)'],
+                ].map(([mode, label]) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => setAssetPreviewState(mode)}
+                    className={`ggd-btn px-2 py-1 ${
+                      assetPreviewState === mode ? 'bg-[#d65539] text-white' : 'bg-[#2a211f] text-slate-200'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-2.5">
-              {VILLAGERS.map((v) => (
-                <div
-                  key={v.id}
-                  style={assetBgStyle}
-                  className="rounded-xl border-2 border-[#090b14] p-2.5 flex flex-col items-center gap-1"
-                >
-                  <PixelVillager avatarId={v.id} size={82} enablePoke={true} />
-                  <div className="text-xs font-extrabold text-center">{v.name}</div>
-                  <code className="text-[10px] bg-black/50 text-sky-300 px-1.5 py-0.5 rounded">
-                    {v.id}.png
-                  </code>
-                </div>
-              ))}
+              {VILLAGERS.map((v, idx) => {
+                const m = getVillagerMotion(v.id);
+                return (
+                  <div
+                    key={v.id}
+                    style={assetBgStyle}
+                    className="rounded-xl border-2 border-[#090b14] p-2.5 flex flex-col items-center gap-1"
+                  >
+                    <PixelVillager
+                      avatarId={v.id}
+                      size={88}
+                      still={assetPreviewState === 'still'}
+                      eyeState={assetPreviewState === 'sleep' ? 'sleep' : 'awake'}
+                      staggerIndex={idx}
+                      enablePoke={true}
+                    />
+                    <div className="text-xs font-extrabold text-center">{v.name}</div>
+                    <div className="text-[10px] text-amber-300/85 text-center leading-tight">{m.reaction}</div>
+                    <code className="text-[10px] bg-black/50 text-sky-300 px-1.5 py-0.5 rounded">
+                      {m.slug}
+                    </code>
+                  </div>
+                );
+              })}
             </div>
           </section>
 

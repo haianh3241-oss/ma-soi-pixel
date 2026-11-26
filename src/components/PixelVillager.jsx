@@ -1,12 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { sfx } from '../audio/sfx.js';
-import { ASSET_PATHS, POKE_EFFECTS, SPRITE_SHEETS } from '../../graphics-pack/themeConfig.js';
+import { ASSET_PATHS } from '../../graphics-pack/themeConfig.js';
+import { VILLAGER_MOTION, getVillagerMotion } from '../data/villagerMotion.js';
 
-export { POKE_EFFECTS };
-
-// Cache missing optional state images (<id>_sleep.png, <id>_talk.png, <id>_poke.png)
-// so we never re-probe missing files on every render
-const missingStateSprites = new Set();
+export const POKE_EFFECTS = VILLAGER_MOTION;
 
 const PARTICLE_VECTORS = [
   { dx: '-28px', dy: '-34px', rot: '-35deg' },
@@ -18,106 +15,175 @@ const PARTICLE_VECTORS = [
 export default function PixelVillager({
   avatarId = 'youth',
   alive = true,
-  size = 76,
+  size = 82,
   isNight = false,
   eyeState = 'awake', // 'awake' | 'sleep' | 'wolf'
   isSpeaking = false,
   animate = true,
+  still = false,
+  emoteKey = null,
   isAccused = false,
   enablePoke = false,
+  staggerIndex = 0,
   onPokeExtra = null,
+  onHeavyImpact = null,
 }) {
+  const motion = getVillagerMotion(avatarId);
   const [bursts, setBursts] = useState([]);
-  const [failedUrls, setFailedUrls] = useState({});
-  const [frameIdx, setFrameIdx] = useState(0);
+  const [reactingPlayId, setReactingPlayId] = useState(null);
+  const [sleepFallback, setSleepFallback] = useState(false);
+
+  const playCounterRef = useRef(0);
+  const lastEmoteKeyRef = useRef(emoteKey);
+  const timersRef = useRef([]);
+
+  const clearMotionTimers = useCallback(() => {
+    timersRef.current.forEach((id) => clearTimeout(id));
+    timersRef.current = [];
+  }, []);
+
+  useEffect(() => {
+    setSleepFallback(false);
+    setReactingPlayId(null);
+  }, [avatarId]);
+
+  useEffect(() => () => clearMotionTimers(), [clearMotionTimers]);
+
+  const triggerEmoteSequence = useCallback(
+    (immediateTapFeedback = false) => {
+      if (!alive) {
+        sfx.play('pop');
+        const id = Date.now() + Math.random();
+        setBursts((prev) => [...prev, { id, particles: ['👻', '💨', '🕯️', '✨'], caption: 'Hù!' }]);
+        const t = setTimeout(() => setBursts((prev) => prev.filter((b) => b.id !== id)), 750);
+        timersRef.current.push(t);
+        return;
+      }
+
+      if (immediateTapFeedback) {
+        sfx.play('tick');
+      }
+
+      const nextPlay = ++playCounterRef.current;
+      setReactingPlayId(nextPlay);
+
+      const impactDelay = Math.round((motion.impactMs || 600) * 0.7);
+      const impactTimer = setTimeout(() => {
+        sfx.play(motion.sfx);
+        if (motion.heavyImpact && onHeavyImpact) onHeavyImpact();
+        const bid = Date.now() + Math.random();
+        setBursts((prev) => [
+          ...prev,
+          {
+            id: bid,
+            particles: motion.particles,
+            caption: motion.caption,
+            slash: motion.slash,
+            animClass: motion.animClass,
+          },
+        ]);
+        const cleanupBurst = setTimeout(() => {
+          setBursts((prev) => prev.filter((b) => b.id !== bid));
+        }, 760);
+        timersRef.current.push(cleanupBurst);
+      }, impactDelay);
+
+      const endTimer = setTimeout(() => {
+        setReactingPlayId((cur) => (cur === nextPlay ? null : cur));
+      }, (motion.emoteMs || 1600) + 60);
+
+      timersRef.current.push(impactTimer, endTimer);
+    },
+    [alive, motion, onHeavyImpact]
+  );
+
+  // External trigger (e.g., hit by throwable projectile or stepping up for Day Defense)
+  useEffect(() => {
+    if (emoteKey == null || still) return;
+    if (lastEmoteKeyRef.current === emoteKey) return;
+    lastEmoteKeyRef.current = emoteKey;
+    triggerEmoteSequence(false);
+  }, [emoteKey, still, triggerEmoteSequence]);
 
   const handlePoke = (e) => {
     if (!enablePoke) return;
     if (onPokeExtra) onPokeExtra(e);
-    if (!alive) {
-      sfx.play('pop');
-      const id = Date.now() + Math.random();
-      setBursts((prev) => [...prev, { id, particles: ['👻', '💨', '🕯️', '✨'], caption: 'Hù!' }]);
-      setTimeout(() => setBursts((prev) => prev.filter((b) => b.id !== id)), 750);
-      return;
-    }
-
-    const eff = POKE_EFFECTS[avatarId] || POKE_EFFECTS.youth;
-    sfx.play(eff.sfx);
-    const id = Date.now() + Math.random();
-    setBursts((prev) => [...prev, { id, ...eff }]);
-    setTimeout(() => setBursts((prev) => prev.filter((b) => b.id !== id)), 750);
+    triggerEmoteSequence(true);
   };
 
   const activeBurst = bursts[bursts.length - 1];
-  const isSleeping = alive && eyeState === 'sleep';
+  const isReacting = alive && !still && reactingPlayId !== null;
+  const isSleeping = alive && eyeState === 'sleep' && !isReacting;
   const isWolfEyes = alive && eyeState === 'wolf';
 
-  // Determine desired state image: poke -> sleep -> talk -> idle
-  const desiredState = !alive
-    ? 'dead'
-    : activeBurst
-      ? 'poke'
-      : isSleeping
-        ? 'sleep'
-        : isSpeaking
-          ? 'talk'
-          : 'idle';
+  let spriteSrc;
+  if (!alive) {
+    spriteSrc = ASSET_PATHS.ghostTombstone;
+  } else if (still) {
+    spriteSrc = ASSET_PATHS.characterIcon(avatarId);
+  } else if (isReacting) {
+    spriteSrc = `${ASSET_PATHS.characterEmote(avatarId)}?play=${reactingPlayId}`;
+  } else if (isSleeping && !sleepFallback) {
+    spriteSrc = ASSET_PATHS.characterSleep(avatarId);
+  } else {
+    spriteSrc = ASSET_PATHS.characterIdle(avatarId);
+  }
 
-  const baseSrc = alive ? ASSET_PATHS.character(avatarId) : ASSET_PATHS.ghostTombstone;
-  const stateUrl =
-    alive && desiredState !== 'idle' ? ASSET_PATHS.characterState(avatarId, desiredState) : null;
-  const useStateUrl = Boolean(stateUrl && !missingStateSprites.has(stateUrl) && !failedUrls[stateUrl]);
-  const spriteSrc = useStateUrl ? stateUrl : baseSrc;
-
-  // Optional horizontal sprite sheet animation if configured in themeConfig.js -> SPRITE_SHEETS
-  const sheetCfg = SPRITE_SHEETS[avatarId];
-  const frameCount = !alive || !sheetCfg
-    ? 1
-    : desiredState === 'sleep'
-      ? sheetCfg.sleepFrames || 1
-      : desiredState === 'talk'
-        ? sheetCfg.talkFrames || 1
-        : sheetCfg.idleFrames || 1;
-
-  useEffect(() => {
-    if (frameCount <= 1) {
-      setFrameIdx(0);
-      return;
-    }
-    const fps = sheetCfg?.fps || 6;
-    const iv = setInterval(() => {
-      setFrameIdx((f) => (f + 1) % frameCount);
-    }, Math.round(1000 / fps));
-    return () => clearInterval(iv);
-  }, [frameCount, sheetCfg?.fps]);
-
-  const idleClass = !alive
+  // IMPORTANT: Never stack CSS anim-soul-idle over animated idle.webp / emote.webp (prevents double bounce!)
+  const motionClass = !alive
     ? 'anim-ghost'
     : activeBurst
-      ? activeBurst.anim
-      : isSleeping
-        ? 'anim-sleep-nod'
-        : isSpeaking
-          ? 'anim-talk-active'
-          : animate
-            ? 'anim-soul-idle'
+      ? activeBurst.animClass || motion.animClass || 'anim-poke-tickle'
+      : isReacting
+        ? ''
+        : isSleeping
+          ? 'anim-sleep-nod'
+          : isSpeaking
+            ? 'anim-talk-active'
             : '';
+
+  const staggerSec = ((staggerIndex % 16) * 0.23).toFixed(2);
+  const motionStyle = isSleeping
+    ? { animationDelay: `-${staggerSec}s`, animationDuration: `${motion.sleepSec || 3.1}s` }
+    : undefined;
 
   return (
     <div
       onClick={handlePoke}
-      className={`relative flex items-end justify-center ${idleClass} ${enablePoke ? 'cursor-pointer' : ''}`}
-      style={{ width: size, height: size }}
+      className={`relative flex items-end justify-center ${motionClass} ${enablePoke ? 'cursor-pointer' : ''}`}
+      style={{ width: size, height: size, ...motionStyle }}
     >
-      {/* Ground oval shadow */}
+      {/* Ground oval shadow anchored to terracotta brick floor */}
       <div
-        className="pointer-events-none absolute bottom-0 left-1/2 -translate-x-1/2 rounded-full bg-black/45 blur-[1px]"
-        style={{ width: size * 0.68, height: Math.max(6, size * 0.14) }}
+        className={`pointer-events-none absolute bottom-0 left-1/2 -translate-x-1/2 rounded-full blur-[1px] transition-all ${
+          isWolfEyes ? 'bg-red-700/65 shadow-[0_0_12px_rgba(239,68,68,0.85)]' : 'bg-black/45'
+        }`}
+        style={{ width: size * 0.66, height: Math.max(6, size * 0.14) }}
       />
 
-      {/* Comic white zZ bubble */}
-      {isSleeping && !activeBurst && (
+      {/* Tombstone mini portrait badge so friends recognize who fell */}
+      {!alive && (
+        <img
+          src={ASSET_PATHS.characterIcon(avatarId)}
+          alt=""
+          draggable={false}
+          className="pointer-events-none absolute bottom-0.5 -left-1 z-20 rounded-full border-2 border-[#191413] bg-[#e4cda8] object-contain grayscale opacity-90 shadow"
+          style={{ width: Math.max(20, Math.round(size * 0.34)), height: Math.max(20, Math.round(size * 0.34)) }}
+        />
+      )}
+
+      {/* Nighttime warm lantern glow for Anh Gác Đêm */}
+      {alive && isNight && !isSleeping && motion.ambientLantern && (
+        <div
+          className="pointer-events-none absolute -inset-2 rounded-full opacity-55"
+          style={{
+            background: 'radial-gradient(circle, rgba(251,191,36,0.45) 0%, rgba(251,191,36,0) 70%)',
+          }}
+        />
+      )}
+
+      {/* Comic ink-bordered zZ bubble */}
+      {isSleeping && (
         <div className="pointer-events-none absolute -top-2 -right-2 z-20 sc-zzz-bubble px-1.5 py-0.2 text-[10px] leading-tight anim-zzz select-none">
           zZ
         </div>
@@ -125,23 +191,23 @@ export default function PixelVillager({
 
       {/* Glowing red wolf-eye flare visible strictly to fellow wolves at night */}
       {isWolfEyes && (
-        <div className="pointer-events-none absolute top-[18%] left-1/2 -translate-x-1/2 z-20 flex gap-2.5">
+        <div className="pointer-events-none absolute top-[16%] left-1/2 -translate-x-1/2 z-20 flex gap-2.5">
           <span className="w-2.5 h-2 rounded-full bg-red-500 shadow-[0_0_10px_#ff2d2d,0_0_16px_#ef4444]" />
           <span className="w-2.5 h-2 rounded-full bg-red-500 shadow-[0_0_10px_#ff2d2d,0_0_16px_#ef4444]" />
         </div>
       )}
 
       {/* Ambient smoke for Smoker & Waterpipe */}
-      {alive && !isSleeping && (avatarId === 'smoker' || avatarId === 'waterpipe') && (
+      {alive && !isSleeping && motion.ambientSmoke && (
         <div className="pointer-events-none absolute -top-2 right-1 flex gap-1 z-20">
-          <span className="anim-smoke inline-block w-2.5 h-2.5 rounded-full bg-slate-200/75" />
+          <span className="anim-smoke inline-block w-2.5 h-2.5 rounded-full bg-slate-100/75" />
           {avatarId === 'waterpipe' && (
             <span className="anim-smoke inline-block w-3 h-3 rounded-full bg-white/80" style={{ animationDelay: '0.5s' }} />
           )}
         </div>
       )}
 
-      {/* Poke Particle Bursts & Slash VFX */}
+      {/* Poke / Emote Impact Particle Bursts & Slash VFX */}
       {bursts.map((b) => (
         <div key={b.id} className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center">
           {b.slash && (
@@ -151,7 +217,7 @@ export default function PixelVillager({
             />
           )}
           <span
-            className="absolute -top-4 font-extrabold text-xs text-amber-300 drop-shadow-[0_2px_0_#000] whitespace-nowrap"
+            className="absolute -top-5 font-extrabold text-xs text-amber-300 drop-shadow-[0_2px_0_#140f0e] whitespace-nowrap"
             style={{ animation: 'particleBurst 0.72s ease-out forwards', '--dx': '0px', '--dy': '-18px', '--rot': '0deg' }}
           >
             {b.caption}
@@ -162,9 +228,9 @@ export default function PixelVillager({
               className="absolute text-lg drop-shadow"
               style={{
                 animation: 'particleBurst 0.72s ease-out forwards',
-                '--dx': PARTICLE_VECTORS[idx].dx,
-                '--dy': PARTICLE_VECTORS[idx].dy,
-                '--rot': PARTICLE_VECTORS[idx].rot,
+                '--dx': PARTICLE_VECTORS[idx % PARTICLE_VECTORS.length].dx,
+                '--dy': PARTICLE_VECTORS[idx % PARTICLE_VECTORS.length].dy,
+                '--rot': PARTICLE_VECTORS[idx % PARTICLE_VECTORS.length].rot,
               }}
             >
               {pt}
@@ -173,41 +239,35 @@ export default function PixelVillager({
         </div>
       ))}
 
-      {frameCount > 1 ? (
-        <div
-          className={`relative z-10 w-full h-full select-none ${isWolfEyes ? 'wolf-eye-glow' : ''}`}
-          style={{
-            backgroundImage: `url('${spriteSrc}')`,
-            backgroundSize: `${frameCount * 100}% 100%`,
-            backgroundPosition: `${(frameIdx / Math.max(1, frameCount - 1)) * 100}% 0%`,
-            backgroundRepeat: 'no-repeat',
-            filter: isAccused
-              ? 'drop-shadow(0 0 10px rgba(239,68,68,0.95)) drop-shadow(0 3px 0 rgba(0,0,0,0.5))'
-              : isNight && isSleeping
-                ? 'brightness(0.78) drop-shadow(0 3px 0 rgba(0,0,0,0.45))'
-                : 'drop-shadow(0 3px 0 rgba(0,0,0,0.45))',
-          }}
-        />
+      {still ? (
+        <picture className="relative z-10 w-full h-full flex items-end justify-center">
+          <img
+            src={spriteSrc}
+            alt={motion.name}
+            draggable={false}
+            className="w-full h-full object-contain select-none"
+          />
+        </picture>
       ) : (
-        <img
-          src={spriteSrc}
-          alt={avatarId}
-          draggable={false}
-          onError={() => {
-            if (useStateUrl && stateUrl) {
-              missingStateSprites.add(stateUrl);
-              setFailedUrls((prev) => ({ ...prev, [stateUrl]: true }));
-            }
-          }}
-          className={`relative z-10 w-full h-full object-contain select-none ${isWolfEyes ? 'wolf-eye-glow' : ''}`}
-          style={{
-            filter: isAccused
-              ? 'drop-shadow(0 0 10px rgba(239,68,68,0.95)) drop-shadow(0 3px 0 rgba(0,0,0,0.5))'
-              : isNight && isSleeping
-                ? 'brightness(0.78) drop-shadow(0 3px 0 rgba(0,0,0,0.45))'
-                : 'drop-shadow(0 3px 0 rgba(0,0,0,0.45))',
-          }}
-        />
+        <picture className="relative z-10 w-full h-full flex items-end justify-center">
+          {alive && <source media="(prefers-reduced-motion: reduce)" srcSet={ASSET_PATHS.characterIcon(avatarId)} />}
+          <img
+            src={spriteSrc}
+            alt={motion.name}
+            draggable={false}
+            onError={() => {
+              if (isSleeping && !sleepFallback) setSleepFallback(true);
+            }}
+            className={`w-full h-full object-contain select-none ${isWolfEyes ? 'wolf-eye-glow' : ''}`}
+            style={{
+              filter: isAccused
+                ? 'drop-shadow(0 0 10px rgba(239,68,68,0.95)) drop-shadow(0 3px 0 rgba(17,13,12,0.55))'
+                : isNight && isSleeping
+                  ? 'brightness(0.76) saturate(0.88) drop-shadow(0 3px 0 rgba(17,13,12,0.55))'
+                  : 'drop-shadow(0 3px 0 rgba(17,13,12,0.5))',
+            }}
+          />
+        </picture>
       )}
     </div>
   );
