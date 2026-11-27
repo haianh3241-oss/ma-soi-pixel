@@ -134,6 +134,9 @@ export default function App() {
       setRoom(nextRoom);
       setVoicePerms(voice);
     });
+    s.on('room:sfx', ({ sound }) => {
+      if (sound) sfx.play(sound);
+    });
     s.on('room:interaction', ({ id, fromId, targetId, itemId }) => {
       const item = INTERACTIONS.find((i) => i.id === itemId);
       if (item?.sfx) sfx.play(item.sfx);
@@ -147,6 +150,7 @@ export default function App() {
       if (item?.type === 'throw' && fromId !== targetId) {
         const proj = {
           id,
+          toId: targetId,
           itemId,
           fromOffsetX: (Math.random() - 0.5) * 260,
           fromOffsetY: 120,
@@ -236,18 +240,12 @@ export default function App() {
         sfx.play('pop');
       } else if (room.phase === PHASES.NIGHT) {
         setRoleOpen(false);
-        sfx.play('wolf');
-      } else if (room.phase === PHASES.DAWN) {
-        sfx.play('rooster');
-        if (room.pendingDeaths?.length > 0) {
-          setTimeout(() => sfx.play('death'), 950);
-        }
       } else if (room.phase === PHASES.GAME_OVER) {
         sfx.play('dawn');
       }
       prevPhaseRef.current = room.phase;
     }
-  }, [room?.phase, room?.pendingDeaths?.length]);
+  }, [room?.phase]);
 
   const voiceChat = useVoiceChat({ socket, room, myId, voicePerms });
   const me = useMemo(() => room?.players?.find((p) => p.id === myId) || null, [room, myId]);

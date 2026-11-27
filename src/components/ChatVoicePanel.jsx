@@ -113,7 +113,7 @@ export default function ChatVoicePanel({
               <input
                 type="range"
                 min="0"
-                max="1"
+                max="2"
                 step="0.05"
                 value={voiceChat.peerVolumes[peer.id] ?? 1}
                 onChange={(e) => voiceChat.setVolume(peer.id, parseFloat(e.target.value))}

@@ -315,6 +315,17 @@ export default function LobbyScreen({
               </span>
             </div>
             <div className="flex items-center gap-1.5 shrink-0">
+              {voiceChat?.micPermission === 'granted' && (
+                <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-black/35 border border-white/10">
+                  <span className="text-[10px] text-emerald-300 font-bold">Mic</span>
+                  <div className="w-12 h-2 rounded-full bg-black/60 overflow-hidden">
+                    <div
+                      className="h-full bg-emerald-400 transition-all duration-75"
+                      style={{ width: `${voiceChat?.micEnabled ? voiceChat?.localMicLevel || 0 : 0}%` }}
+                    />
+                  </div>
+                </div>
+              )}
               {voiceChat?.micPermission === 'idle' && (
                 <button
                   type="button"

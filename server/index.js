@@ -85,17 +85,33 @@ function broadcastRoom(room) {
   }
 }
 
+function broadcastSfx(room, sound, targetPlayerIds = null) {
+  const filterSet = targetPlayerIds ? new Set(targetPlayerIds) : null;
+  for (const player of room.players) {
+    if (player.isBot || !player.socketId) continue;
+    if (filterSet && !filterSet.has(player.id)) continue;
+    io.to(player.socketId).emit('room:sfx', { sound });
+  }
+}
+
 function triggerNightEarly(room) {
   enterNight(room);
   const earlyMs = Math.max(18000, Math.round(room.settings.nightSeconds * 650));
   setPhaseTimer(room, earlyMs, () => triggerNightLate(room));
   broadcastRoom(room);
+  broadcastSfx(room, 'wolf');
   scheduleBotActions(room, botHandlers);
 }
 
 function triggerNightLate(room) {
   if (room.phase !== PHASES.NIGHT || room.nightStage !== 'EARLY') return;
   enterLateNight(room);
+  if (room.nightActions.cursedConvertedId) {
+    const wolfTargets = room.players
+      .filter((p) => !p.isBot && (isWolfRole(p.role) || p.id === room.nightActions.cursedConvertedId))
+      .map((p) => p.id);
+    broadcastSfx(room, 'curse', wolfTargets);
+  }
   // If nobody needs to act in Late Night, jump straight to Dawn after a brief beat
   if (checkLateNightComplete(room)) {
     const quickMs = 2000;
@@ -111,9 +127,18 @@ function triggerNightLate(room) {
 
 function triggerDawn(room) {
   if (room.phase !== PHASES.NIGHT) return;
-  resolveNightToDawn(room);
+  const deaths = resolveNightToDawn(room);
   setPhaseTimer(room, 4500, () => afterDawn(room));
   broadcastRoom(room);
+  broadcastSfx(room, 'rooster');
+  if (deaths.length > 0) {
+    if (deaths.some((d) => d.cause === 'wolf')) {
+      setTimeout(() => broadcastSfx(room, 'bite'), 850);
+    } else if (deaths.some((d) => d.cause === 'poison')) {
+      setTimeout(() => broadcastSfx(room, 'potion'), 850);
+    }
+    setTimeout(() => broadcastSfx(room, 'death'), 1350);
+  }
 }
 
 function afterDawn(room) {
@@ -207,6 +232,7 @@ function finishDayDiscuss(room) {
   setPhaseTimer(room, room.settings.defenseSeconds * 1000, () => enterDayVerdict(room));
   scheduleBotActions(room, botHandlers);
   broadcastRoom(room);
+  broadcastSfx(room, 'drum');
 }
 
 function enterDayVerdict(room) {
@@ -221,6 +247,9 @@ function enterDayVerdict(room) {
 function finishDayVerdict(room) {
   if (room.phase !== PHASES.DAY_VERDICT) return;
   const { executed, jesterWon } = tallyVerdict(room);
+  if (executed) {
+    broadcastSfx(room, 'execution');
+  }
   if (jesterWon) {
     enterGameOver(room);
     return;
@@ -269,11 +298,18 @@ const botHandlers = {
     if (room.phase !== PHASES.NIGHT || room.nightStage !== 'EARLY') return;
     const p = room.players.find((x) => x.id === playerId && x.alive && isWolfRole(x.role));
     if (!p) return;
-    room.nightActions.wolfVotes[playerId] = targetId;
+    if (targetId) {
+      const t = room.players.find((x) => x.id === targetId && x.alive && !isWolfRole(x.role));
+      if (!t) return;
+      room.nightActions.wolfVotes[playerId] = targetId;
+    }
     if (p.role === 'cursed_wolf' && !room.cursedUsed) {
       room.nightActions.curseActive = Boolean(curseActive);
     }
-    if (lock) room.nightActions.wolfLocked = true;
+    const aliveCursed = getAlivePlayers(room).some((w) => w.role === 'cursed_wolf' && !room.cursedUsed);
+    if (lock && (!aliveCursed || p.role === 'cursed_wolf')) {
+      room.nightActions.wolfLocked = true;
+    }
     if (checkEarlyNightComplete(room)) triggerNightLate(room);
     else broadcastRoom(room);
   },
@@ -325,6 +361,7 @@ const botHandlers = {
       text: `💥 ĐOÀNG! ${hunter.name} nổ phát súng cuối cùng hạ gục ${target.name}! (Vai trò vẫn được giữ kín)`,
     });
     room.secretLogs.push(`🏹 Thợ Săn ${hunter.name} bắn kéo theo ${target.name}.`);
+    broadcastSfx(room, 'gunshot');
     afterHunterShot(room);
   },
   submitDayVote(room, playerId, targetId) {
@@ -537,6 +574,7 @@ io.on('connection', (socket) => {
       p.originalRole = null;
       p.mayorRevealed = false;
       p.deathInfo = null;
+      p.convertedOnDay = null;
     }
     ctx.room.settings.roleCounts = getBalancedRoles(ctx.room.players.length);
     broadcastRoom(ctx.room);
@@ -724,6 +762,29 @@ io.on('connection', (socket) => {
     if (!list.some((s) => s.stickerId === stickerId && s.fromId === ctx.player.id)) {
       list.push({ stickerId, fromId: ctx.player.id, fromName: ctx.player.name });
       broadcastRoom(ctx.room);
+    }
+  });
+
+  socket.on('voice:chunk', ({ audio, level }) => {
+    const ctx = getCtx();
+    if (!ctx || !audio) return;
+    const byteLen = audio.byteLength || audio.length || 0;
+    if (byteLen < 5 || byteLen > 16384) return;
+
+    const perms = computeVoicePermissions(ctx.room, ctx.player);
+    if (!perms.canSpeak || !perms.audibleToPeerIds?.length) return;
+
+    const audibleSet = new Set(perms.audibleToPeerIds);
+    for (const target of ctx.room.players) {
+      if (target.isBot || !target.connected || !target.socketId || target.id === ctx.player.id) continue;
+      if (!audibleSet.has(target.id)) continue;
+      const targetPerms = computeVoicePermissions(ctx.room, target);
+      if (!targetPerms.hearablePeerIds.includes(ctx.player.id)) continue;
+      io.to(target.socketId).emit('voice:chunk', {
+        fromId: ctx.player.id,
+        audio,
+        level: typeof level === 'number' ? level : 1,
+      });
     }
   });
 

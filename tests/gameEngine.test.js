@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { PHASES } from '../shared/constants.js';
+import { decodeAdpcm, downsampleTo16k, encodeAdpcm } from '../src/audio/adpcm.js';
 import {
   checkWinCondition,
   computeVoicePermissions,
@@ -189,4 +190,65 @@ test('Voice permissions strictly enforce Lobby, Day, Night, Wolf, Village, and D
   assert.equal(dayDead.channel, 'dead');
   assert.deepEqual(dayDead.hearablePeerIds.sort(), ['h1', 'h2', 'h3', 'h4', 'h6']);
   assert.deepEqual(dayDead.audibleToPeerIds, ['h6']);
+});
+
+test('Dead Hunter enters hunterQueue and exposes activeHunterId for shooting', () => {
+  const room = setup5PlayerRoom();
+  room.players[1].role = 'hunter';
+  room.players[1].originalRole = 'hunter';
+  room.dayCount = 1;
+  enterNight(room);
+  room.nightActions.wolfVotes = { p4: 'p2' };
+  enterLateNight(room);
+  const deaths = resolveNightToDawn(room);
+  assert.equal(deaths.length, 1);
+  assert.equal(room.players[1].alive, false);
+  assert.deepEqual(room.hunterQueue, ['p2']);
+
+  room.phase = PHASES.HUNTER_SHOT;
+  const hunterView = sanitizeRoomForPlayer(room, 'p2');
+  assert.equal(hunterView.activeHunterId, 'p2');
+});
+
+test('Cursed Wolf keeps cursedUsed intact when biting without curse and sets convertedOnDay when cursing', () => {
+  const room = setup5PlayerRoom();
+  room.dayCount = 1;
+  enterNight(room);
+  room.nightActions.wolfVotes = { p4: 'p2' };
+  room.nightActions.curseActive = false;
+  enterLateNight(room);
+  const deaths = resolveNightToDawn(room);
+  assert.equal(deaths.length, 1);
+  assert.equal(room.players[1].alive, false);
+  assert.equal(room.cursedUsed, false);
+
+  // Night 2: curse p1 (mayor)
+  room.dayCount = 2;
+  enterNight(room);
+  room.nightActions.wolfVotes = { p4: 'p1' };
+  room.nightActions.curseActive = true;
+  enterLateNight(room);
+  resolveNightToDawn(room);
+  assert.equal(room.players[0].role, 'werewolf');
+  assert.equal(room.players[0].convertedOnDay, 2);
+  const p1View = sanitizeRoomForPlayer(room, 'p1');
+  assert.equal(p1View.selfPrivate.convertedOnDay, 2);
+});
+
+test('IMA-ADPCM codec preserves 16kHz voice signal cleanly across encode/decode', () => {
+  const input = new Float32Array(960);
+  for (let i = 0; i < input.length; i++) {
+    input[i] = 0.5 * Math.sin((2 * Math.PI * 440 * i) / 48000);
+  }
+  const down = downsampleTo16k(input, 48000);
+  assert.equal(down.length, 320);
+  const encoded = encodeAdpcm(down);
+  assert.equal(encoded.length, 4 + 160);
+  const decoded = decodeAdpcm(encoded);
+  assert.equal(decoded.length, 320);
+  let maxErr = 0;
+  for (let i = 0; i < 320; i++) {
+    maxErr = Math.max(maxErr, Math.abs(decoded[i] - down[i]));
+  }
+  assert.ok(maxErr < 0.08, `Expected ADPCM error < 0.08, got ${maxErr}`);
 });

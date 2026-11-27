@@ -142,6 +142,7 @@ export function startGame(room) {
     p.witchPoisonLeft = false;
     p.seerHistory = [];
     p.deathInfo = null;
+    p.convertedOnDay = null;
     return p;
   });
 
@@ -309,6 +310,7 @@ export function enterLateNight(room) {
     na.cursedConvertedId = victim.id;
     room.cursedUsed = true;
     victim.role = 'werewolf';
+    victim.convertedOnDay = room.dayCount;
     room.secretLogs.push(`🩸 Đêm ${room.dayCount}: Sói Nguyền đã nguyền rủa biến ${victim.name} thành Ma Sói!`);
   } else if (victim && victim.role === 'elder' && victim.elderLives > 1) {
     na.effectiveWolfVictim = null;
@@ -792,8 +794,10 @@ export function sanitizeRoomForPlayer(room, viewerId) {
         lovers: room.lovers.includes(viewerId) ? room.lovers : [],
         lastGuardedId: viewer.role === 'guard' ? room.lastGuardedId : null,
         cursedUsed: viewer.role === 'cursed_wolf' ? room.cursedUsed : false,
+        convertedOnDay: viewer.convertedOnDay || null,
         wolfVotes: viewerIsWolf && room.phase === PHASES.NIGHT ? room.nightActions.wolfVotes : {},
-        curseActive: viewerIsWolf && room.phase === PHASES.NIGHT ? room.nightActions.curseActive : false,
+        curseActive: viewerIsWolf && room.phase === PHASES.NIGHT ? Boolean(room.nightActions.curseActive) : false,
+        wolfLocked: viewerIsWolf && room.phase === PHASES.NIGHT ? Boolean(room.nightActions.wolfLocked) : false,
         witchVictimId:
           viewer.role === 'witch' &&
           viewer.alive &&

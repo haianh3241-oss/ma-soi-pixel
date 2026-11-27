@@ -32,6 +32,15 @@ test('All 11 role icons, backgrounds, and village props exist in graphics-pack/a
     'props/campfire_lit.png',
     'props/campfire_out.png',
     'props/ghost_tombstone.png',
+    'sfx/rooster.wav',
+    'sfx/wolf_howl.wav',
+    'sfx/wolf_bite.wav',
+    'sfx/gunshot.wav',
+    'sfx/execution.wav',
+    'sfx/war_drum.wav',
+    'sfx/curse_spell.wav',
+    'sfx/witch_potion.wav',
+    'sfx/death.wav',
   ]) {
     assert.equal(fs.existsSync(path.join(ASSETS_ROOT, rel)), true, `Missing ${rel}`);
   }
