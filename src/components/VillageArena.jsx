@@ -87,16 +87,6 @@ function CampfireCenter({ isNight }) {
   );
 }
 
-const NIGHT_EFFECT_META = {
-  wolf_bite: { icon: '🐺💢', color: 'border-red-500 bg-red-600/35', label: 'Vồ Cắn!' },
-  wolf_curse: { icon: '🩸🌙', color: 'border-purple-500 bg-purple-600/40', label: 'Nguyền Hóa Sói!' },
-  guard: { icon: '🛡️', color: 'border-sky-400 bg-sky-500/30', label: 'Che Chở!' },
-  cupid: { icon: '💘', color: 'border-pink-400 bg-pink-500/30', label: 'Ghép Đôi!' },
-  seer: { icon: '🔮', color: 'border-indigo-400 bg-indigo-500/30', label: 'Soi Bài!' },
-  witch_heal: { icon: '💚🧪', color: 'border-emerald-400 bg-emerald-500/35', label: 'Bình Cứu!' },
-  witch_poison: { icon: '☠️🧪', color: 'border-purple-500 bg-purple-700/40', label: 'Bình Độc!' },
-};
-
 export default function VillageArena({
   room,
   me,
@@ -164,7 +154,6 @@ export default function VillageArena({
   const [actorAnims, setActorAnims] = useState({}); // id -> { anim, wolf }
   const [dustPuffs, setDustPuffs] = useState([]);
   const [slashVfx, setSlashVfx] = useState([]);
-  const [nightEffects, setNightEffects] = useState([]);
 
   const seenProjectilesRef = useRef(new Set());
   const prevDefenseKeyRef = useRef(null);
@@ -265,19 +254,6 @@ export default function VillageArena({
     onSlashVfx: handleSlashVfx,
     onTogglePause: useCallback(() => setPauseOpen((o) => !o), []),
   });
-
-  // Subscribe to authorized night visual effects (for caster + Ghosts + Wolves)
-  useEffect(() => {
-    if (!socket) return;
-    const onNightEff = (eff) => {
-      setNightEffects((prev) => [...prev.slice(-10), eff]);
-      setTimeout(() => {
-        setNightEffects((prev) => prev.filter((e) => e.id !== eff.id));
-      }, 1500);
-    };
-    socket.on('night:effect', onNightEff);
-    return () => socket.off('night:effect', onNightEff);
-  }, [socket]);
 
   useEffect(() => {
     preloadRoomVillagers(activePlayers.map((p) => p.avatarId));
@@ -614,18 +590,10 @@ export default function VillageArena({
         {/* LAYER 2: Gallows Stage (Trăn Trối & Persistent Hanged Corpses) */}
         <GallowsStage players={activePlayers} accusedId={room.accusedId} phase={room.phase} />
 
-        {/* LAYER 3: Persistent Ground Crime Scene Corpses (until GAME_OVER) */}
+        {/* LAYER 3: Persistent Ground Crime Scene Corpses (neutral — never leaks Wolf/Witch/Hunter/Love cause!) */}
         {groundCorpses.map((p) => {
           const cx = p.deathInfo.x ?? 800;
           const cy = p.deathInfo.y ?? 650;
-          const causeLabel =
-            p.deathInfo.cause === 'wolf'
-              ? '🐺 Vết Sói cắn'
-              : p.deathInfo.cause === 'poison'
-                ? '🧪 Trúng độc'
-                : p.deathInfo.cause === 'hunter'
-                  ? '🔫 Bị bắn'
-                  : '💔 Tình nhân';
           return (
             <div
               key={`corpse-${p.id}`}
@@ -641,17 +609,11 @@ export default function VillageArena({
               }}
               className="absolute w-28 h-28 flex flex-col items-center justify-center cursor-pointer"
             >
-              <img
-                src={ASSET_PATHS.deathDecal(p.deathInfo.cause)}
-                alt=""
-                draggable={false}
-                className="pointer-events-none absolute -bottom-2 w-28 h-20 object-contain opacity-95"
-              />
               <div className="relative z-10 -rotate-[82deg] translate-y-2 saturate-75 brightness-90">
                 <VillagerPuppetRig avatarId={p.avatarId} size={78} pose="corpse" emoteHead={true} />
               </div>
               <span className="relative z-20 -mt-1 rounded-full bg-red-950/95 border border-[#140f0e] px-2 py-0.5 text-[10px] font-black text-red-200 whitespace-nowrap shadow">
-                ☠️ {p.name} • {causeLabel}
+                ☠️ {p.name}
               </span>
             </div>
           );
@@ -731,28 +693,6 @@ export default function VillageArena({
               </span>
             </div>
           );
-        })}
-
-        {/* LAYER 6: Night Visual Skill Effects (Visible ONLY to Ghosts, Caster, & Wolves) */}
-        {nightEffects.map((eff) => {
-          const meta = NIGHT_EFFECT_META[eff.effectType] || NIGHT_EFFECT_META.seer;
-          return (eff.targetIds || []).map((tid) => {
-            const tp = room.players.find((x) => x.id === tid);
-            if (!tp) return null;
-            const livePos = controller.actorsRef.current.get(tid);
-            const ex = livePos?.x ?? tp.sleepOrigin?.x ?? tp.x ?? 800;
-            const ey = livePos?.y ?? tp.sleepOrigin?.y ?? tp.y ?? 600;
-            return (
-              <div
-                key={`${eff.id}-${tid}`}
-                style={{ left: ex, top: ey - 32, zIndex: 920 }}
-                className={`pointer-events-none absolute anim-night-pulse w-28 h-28 rounded-full border-4 flex flex-col items-center justify-center ${meta.color}`}
-              >
-                <span className="text-2xl">{meta.icon}</span>
-                <span className="text-[10px] font-black text-white drop-shadow">{meta.label}</span>
-              </div>
-            );
-          });
         })}
 
         {/* LAYER 7: Flying Throwables */}

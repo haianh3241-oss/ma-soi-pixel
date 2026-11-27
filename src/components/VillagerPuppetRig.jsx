@@ -5,8 +5,8 @@ import { VILLAGER_PARTS_META, VILLAGER_PROP_MODE } from '../data/villagerRigConf
 
 /**
  * 7-Layer Cutout Puppet Rig cho 22 dân làng Ma Chó:
- * Tất cả tọa độ khớp & tâm xoay được tính bằng px nguyên tuyệt đối (không dùng -translate-x-1/2 + keyframe transform chồng nhau)
- * để đảm bảo không bao giờ vỡ/lệch bộ phận cơ thể trên trình duyệt Mobile (iOS Safari / Android Chrome).
+ * Tất cả khớp vai, cổ, hông được neo theo biên thân áo thực tế (Socket Tuck sâu) bằng px nguyên tuyệt đối
+ * để khi chạy nhanh, nhảy hay xoay người không bao giờ hở hoặc bay rời bộ phận.
  */
 export default function VillagerPuppetRig({
   avatarId = 'drunkard',
@@ -26,9 +26,9 @@ export default function VillagerPuppetRig({
   const headPart = useEmoteHead && hasPart('head-emote') ? 'head-emote' : 'head-neutral';
 
   const headH = Math.round(size * 0.44);
-  const torsoH = Math.round(size * 0.27);
-  const armH = Math.round(size * 0.27);
-  const legH = Math.round(size * 0.22);
+  const torsoH = Math.round(size * 0.29);
+  const armH = Math.round(size * 0.25);
+  const legH = Math.round(size * 0.23);
 
   const widthFromAspect = (partName, targetH) => {
     const aspect = meta[partName]?.aspect || 0.7;
@@ -42,10 +42,26 @@ export default function VillagerPuppetRig({
   const legAW = widthFromAspect('leg-a', legH);
   const legBW = widthFromAspect('leg-b', legH);
 
+  // Anchor neck, shoulders & hips directly onto torso bounding box so parts tuck snugly inside garments
+  const torsoLeft = Math.round((size - torsoW) / 2);
+  const torsoBottom = Math.round(size * 0.19);
+  const torsoTop = size - torsoBottom - torsoH;
+
+  const armTop = torsoTop + Math.round(torsoH * 0.08);
+  const armALeft = Math.round(torsoLeft - armAW * 0.22);
+  const armBLeft = Math.round(torsoLeft + torsoW - armBW * 0.78);
+
+  const legBottom = Math.round(size * 0.05);
+  const legALeft = Math.round(torsoLeft + torsoW * 0.14);
+  const legBLeft = Math.round(torsoLeft + torsoW * 0.5);
+
+  const headLeft = Math.round((size - headW) / 2);
+  const headBottom = torsoBottom + torsoH - Math.round(size * 0.08);
+
   const showHeldProp = propMode !== 'skip' && propMode !== 'sheep_pet' && hasPart('prop');
-  const propH = Math.round(size * 0.34);
+  const propH = Math.round(size * 0.31);
   const propW = widthFromAspect('prop', propH);
-  const crookH = Math.round(size * 0.44);
+  const crookH = Math.round(size * 0.4);
   const crookW = widthFromAspect('crook', crookH);
 
   const originPx = (w, h, xr, yr) => `${Math.round(w * xr)}px ${Math.round(h * yr)}px`;
@@ -56,7 +72,7 @@ export default function VillagerPuppetRig({
       className={`relative select-none pointer-events-none overflow-visible ${poseClass}`}
       style={{ width: size, height: size }}
     >
-      {/* Optional Shepherd's Sheep trailing behind Bé Chăn Cừu */}
+      {/* Optional Shepherd's Sheep trailing closely behind Bé Chăn Cừu */}
       {propMode === 'sheep_pet' && hasPart('sheep') && pose !== 'hanging' && (
         <img
           src={src('sheep')}
@@ -65,10 +81,10 @@ export default function VillagerPuppetRig({
           className="rig-sheep absolute z-[1] object-contain"
           style={{
             ...noSquishStyle,
-            width: Math.round(size * 0.34),
-            height: Math.round(size * 0.28),
-            left: Math.round(-size * 0.12),
-            bottom: Math.round(size * 0.03),
+            width: Math.round(size * 0.32),
+            height: Math.round(size * 0.26),
+            left: Math.round(-size * 0.07),
+            bottom: Math.round(size * 0.04),
           }}
         />
       )}
@@ -78,7 +94,7 @@ export default function VillagerPuppetRig({
         className="rig-body relative w-full h-full overflow-visible"
         style={{ transformOrigin: originPx(size, size, 0.5, 0.88) }}
       >
-        {/* LAYER 1: Back Arm (Behind Torso) */}
+        {/* LAYER 1: Back Arm (Tucked smoothly behind back shoulder) */}
         {hasPart('arm-b') && (
           <img
             src={src('arm-b')}
@@ -89,14 +105,14 @@ export default function VillagerPuppetRig({
               ...noSquishStyle,
               width: armBW,
               height: armH,
-              left: Math.round(size * 0.55),
-              top: Math.round(size * 0.44),
-              transformOrigin: originPx(armBW, armH, 0.45, 0.12),
+              left: armBLeft,
+              top: armTop,
+              transformOrigin: originPx(armBW, armH, 0.45, 0.16),
             }}
           />
         )}
 
-        {/* LAYER 2: Back Leg */}
+        {/* LAYER 2: Back Leg (Tucked deep inside trouser waist) */}
         {hasPart('leg-b') && (
           <img
             src={src('leg-b')}
@@ -107,14 +123,14 @@ export default function VillagerPuppetRig({
               ...noSquishStyle,
               width: legBW,
               height: legH,
-              left: Math.round(size * 0.49),
-              bottom: Math.round(size * 0.04),
-              transformOrigin: originPx(legBW, legH, 0.45, 0.12),
+              left: legBLeft,
+              bottom: legBottom,
+              transformOrigin: originPx(legBW, legH, 0.45, 0.14),
             }}
           />
         )}
 
-        {/* LAYER 3: Front Leg (Shoe pre-flipped right) */}
+        {/* LAYER 3: Front Leg (Shoe pre-flipped right, tucked deep behind torso hem) */}
         {hasPart('leg-a') && (
           <img
             src={src('leg-a')}
@@ -125,9 +141,9 @@ export default function VillagerPuppetRig({
               ...noSquishStyle,
               width: legAW,
               height: legH,
-              left: Math.round(size * 0.34),
-              bottom: Math.round(size * 0.04),
-              transformOrigin: originPx(legAW, legH, 0.45, 0.12),
+              left: legALeft,
+              bottom: legBottom,
+              transformOrigin: originPx(legAW, legH, 0.45, 0.14),
             }}
           />
         )}
@@ -143,14 +159,14 @@ export default function VillagerPuppetRig({
               ...noSquishStyle,
               width: torsoW,
               height: torsoH,
-              left: Math.round((size - torsoW) / 2),
-              bottom: Math.round(size * 0.2),
+              left: torsoLeft,
+              bottom: torsoBottom,
               transformOrigin: originPx(torsoW, torsoH, 0.5, 0.8),
             }}
           />
         )}
 
-        {/* LAYER 5: Head (Centered strictly in px, zero translateX conflict) */}
+        {/* LAYER 5: Head (Overlaps torso collar snugly) */}
         {hasPart(headPart) && (
           <img
             src={src(headPart)}
@@ -161,8 +177,8 @@ export default function VillagerPuppetRig({
               ...noSquishStyle,
               width: headW,
               height: headH,
-              left: Math.round((size - headW) / 2),
-              bottom: Math.round(size * 0.41),
+              left: headLeft,
+              bottom: headBottom,
               transformOrigin: originPx(headW, headH, 0.48, 0.88),
             }}
           />
@@ -177,11 +193,11 @@ export default function VillagerPuppetRig({
             className="rig-prop absolute z-[7] object-contain"
             style={{
               ...noSquishStyle,
-              width: Math.round(propW * 0.9),
-              height: Math.round(propH * 0.9),
-              left: Math.round(size * 0.48),
-              bottom: Math.round(size * 0.2),
-              transformOrigin: originPx(Math.round(propW * 0.9), Math.round(propH * 0.9), 0.25, 0.5),
+              width: Math.round(propW * 0.88),
+              height: Math.round(propH * 0.88),
+              left: Math.round(torsoLeft + torsoW * 0.58),
+              bottom: torsoBottom,
+              transformOrigin: originPx(Math.round(propW * 0.88), Math.round(propH * 0.88), 0.25, 0.5),
             }}
           />
         )}
@@ -192,9 +208,9 @@ export default function VillagerPuppetRig({
             style={{
               width: armAW,
               height: armH,
-              left: Math.round(size * 0.27),
-              top: Math.round(size * 0.44),
-              transformOrigin: originPx(armAW, armH, 0.52, 0.14),
+              left: armALeft,
+              top: armTop,
+              transformOrigin: originPx(armAW, armH, 0.5, 0.16),
             }}
           >
             <img
@@ -214,15 +230,15 @@ export default function VillagerPuppetRig({
                   ...noSquishStyle,
                   width: propW,
                   height: propH,
-                  left: propMode === 'shoulder_heavy' ? Math.round(-armAW * 0.35) : Math.round(armAW * 0.32),
+                  left: propMode === 'shoulder_heavy' ? Math.round(-armAW * 0.28) : Math.round(armAW * 0.2),
                   top:
                     propMode === 'shoulder_heavy'
-                      ? Math.round(-armH * 0.45)
+                      ? Math.round(-armH * 0.36)
                       : propMode === 'hand_cane'
-                        ? Math.round(armH * 0.14)
-                        : Math.round(-armH * 0.12),
-                  transform: propMode === 'shoulder_heavy' ? 'rotate(-16deg)' : 'rotate(8deg)',
-                  transformOrigin: originPx(propW, propH, 0.25, 0.75),
+                        ? Math.round(armH * 0.12)
+                        : Math.round(-armH * 0.04),
+                  transform: propMode === 'shoulder_heavy' ? 'rotate(-14deg)' : 'rotate(6deg)',
+                  transformOrigin: originPx(propW, propH, 0.25, 0.78),
                 }}
               />
             )}
@@ -236,8 +252,8 @@ export default function VillagerPuppetRig({
                   ...noSquishStyle,
                   width: crookW,
                   height: crookH,
-                  left: Math.round(armAW * 0.4),
-                  top: Math.round(-armH * 0.3),
+                  left: Math.round(armAW * 0.28),
+                  top: Math.round(-armH * 0.25),
                 }}
               />
             )}

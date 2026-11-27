@@ -1020,7 +1020,12 @@ export function sanitizeRoomForPlayer(room, viewerId) {
       alive: p.alive,
       will: isGameOver || !p.alive ? (room.settings.enableWills ? p.will : '') : p.id === viewerId ? p.will : '',
       mayorRevealed: p.mayorRevealed,
-      deathInfo: p.deathInfo,
+      deathInfo: p.deathInfo
+        ? {
+            ...p.deathInfo,
+            cause: isGameOver || p.deathInfo.cause === 'lynch' ? p.deathInfo.cause : 'unknown',
+          }
+        : null,
       role: showRole ? p.role : null,
       originalRole: isGameOver ? p.originalRole : null,
       x: Math.round(visX),
@@ -1118,7 +1123,12 @@ export function sanitizeRoomForPlayer(room, viewerId) {
     players,
     accusedId: room.accusedId,
     activeHunterId: room.phase === PHASES.HUNTER_SHOT ? room.hunterQueue[0] || null : null,
-    pendingDeaths: room.pendingDeaths,
+    pendingDeaths: (room.pendingDeaths || []).map((d) => ({
+      playerId: d.playerId,
+      name: d.name,
+      will: d.will,
+      cause: isGameOver ? d.cause : 'unknown',
+    })),
     publicDayVotes,
     publicVerdictVotes,
     skipVotes: room.skipVotes || [],

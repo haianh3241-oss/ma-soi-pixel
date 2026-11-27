@@ -446,20 +446,20 @@ body {
   50% { transform: rotate(2.5deg); }
 }
 @keyframes rigWalkLegA {
-  0%, 100% { transform: rotate(28deg) translate3d(0, 0, 0); }
-  50% { transform: rotate(-28deg) translate3d(0, -3px, 0); }
+  0%, 100% { transform: rotate(24deg); }
+  50% { transform: rotate(-22deg); }
 }
 @keyframes rigWalkLegB {
-  0%, 100% { transform: rotate(-28deg) translate3d(0, -3px, 0); }
-  50% { transform: rotate(28deg) translate3d(0, 0, 0); }
+  0%, 100% { transform: rotate(-22deg); }
+  50% { transform: rotate(24deg); }
 }
 @keyframes rigWalkArmA {
-  0%, 100% { transform: rotate(-24deg); }
-  50% { transform: rotate(22deg); }
+  0%, 100% { transform: rotate(-18deg); }
+  50% { transform: rotate(18deg); }
 }
 @keyframes rigWalkArmB {
-  0%, 100% { transform: rotate(22deg); }
-  50% { transform: rotate(-24deg); }
+  0%, 100% { transform: rotate(18deg); }
+  50% { transform: rotate(-18deg); }
 }
 
 .rig-pose-walk .rig-body { animation: rigWalkBody 0.50s ease-in-out infinite; }
@@ -470,31 +470,31 @@ body {
 .rig-pose-walk .rig-arm-b { animation: rigWalkArmB 0.50s ease-in-out infinite; }
 .rig-pose-walk .rig-sheep { animation: rigWalkBody 0.45s ease-in-out -0.08s infinite; }
 
-/* RUN CYCLE (0.33s snappy forward lean + squash/stretch) */
+/* RUN CYCLE (0.33s snappy forward lean + compact joint swing so limbs stay locked in torso) */
 @keyframes rigRunBody {
-  0%, 100% { transform: translate3d(0, 1px, 0) rotate(12deg) scale(1.03, 0.96); }
-  25%, 75% { transform: translate3d(0, -5px, 0) rotate(11deg) scale(0.97, 1.04); }
-  50% { transform: translate3d(0, 1px, 0) rotate(13deg) scale(1.03, 0.96); }
+  0%, 100% { transform: translate3d(0, 1px, 0) rotate(9deg) scale(1.02, 0.97); }
+  25%, 75% { transform: translate3d(0, -3px, 0) rotate(8deg) scale(0.98, 1.03); }
+  50% { transform: translate3d(0, 1px, 0) rotate(10deg) scale(1.02, 0.97); }
 }
 @keyframes rigRunHead {
-  0%, 100% { transform: rotate(-6deg); }
-  50% { transform: rotate(-2deg); }
+  0%, 100% { transform: rotate(-4deg); }
+  50% { transform: rotate(-1deg); }
 }
 @keyframes rigRunLegA {
-  0%, 100% { transform: rotate(48deg) translate3d(0, -2px, 0); }
-  50% { transform: rotate(-44deg) translate3d(0, -4px, 0); }
+  0%, 100% { transform: rotate(30deg); }
+  50% { transform: rotate(-28deg); }
 }
 @keyframes rigRunLegB {
-  0%, 100% { transform: rotate(-44deg) translate3d(0, -4px, 0); }
-  50% { transform: rotate(48deg) translate3d(0, -2px, 0); }
+  0%, 100% { transform: rotate(-28deg); }
+  50% { transform: rotate(30deg); }
 }
 @keyframes rigRunArmA {
-  0%, 100% { transform: rotate(-42deg); }
-  50% { transform: rotate(38deg); }
+  0%, 100% { transform: rotate(-26deg); }
+  50% { transform: rotate(24deg); }
 }
 @keyframes rigRunArmB {
-  0%, 100% { transform: rotate(38deg); }
-  50% { transform: rotate(-42deg); }
+  0%, 100% { transform: rotate(24deg); }
+  50% { transform: rotate(-26deg); }
 }
 
 .rig-pose-run .rig-body { animation: rigRunBody 0.33s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite; }

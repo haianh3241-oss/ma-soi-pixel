@@ -102,26 +102,6 @@ function broadcastSfx(room, sound, targetPlayerIds = null) {
   }
 }
 
-function broadcastNightEffect(room, actor, targetIds, effectType) {
-  if (!room || room.phase !== PHASES.NIGHT || !actor) return;
-  const actorIsWolf = isWolfRole(actor.role);
-  for (const viewer of room.players) {
-    if (viewer.isBot || !viewer.connected || !viewer.socketId) continue;
-    const viewerIsDead = !viewer.alive || viewer.isSpectator;
-    const allowed =
-      viewerIsDead ||
-      viewer.id === actor.id ||
-      (actorIsWolf && viewer.alive && isWolfRole(viewer.role));
-    if (!allowed) continue;
-    io.to(viewer.socketId).emit('night:effect', {
-      id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      actorId: actor.id,
-      targetIds,
-      effectType,
-    });
-  }
-}
-
 function triggerNightEarly(room) {
   enterNight(room);
   const earlyMs = Math.max(18000, Math.round(room.settings.nightSeconds * 650));
@@ -160,11 +140,7 @@ function triggerDawn(room) {
   broadcastRoom(room);
   broadcastSfx(room, 'rooster');
   if (deaths.length > 0) {
-    if (deaths.some((d) => d.cause === 'wolf')) {
-      setTimeout(() => broadcastSfx(room, 'bite'), 850);
-    } else if (deaths.some((d) => d.cause === 'poison')) {
-      setTimeout(() => broadcastSfx(room, 'potion'), 850);
-    }
+    // Only play generic death bell — never leak wolf bite or witch poison sfx!
     setTimeout(() => broadcastSfx(room, 'death'), 1350);
   }
 }
@@ -312,7 +288,6 @@ const botHandlers = {
     const p = room.players.find((x) => x.id === playerId && x.alive && x.role === 'cupid');
     if (!p || targets.length !== 2 || targets[0] === targets[1]) return;
     room.nightActions.cupidTargets = targets;
-    broadcastNightEffect(room, p, targets, 'cupid');
     returnActorToSleepMat(p);
     if (checkEarlyNightComplete(room)) triggerNightLate(room);
     else broadcastRoom(room);
@@ -323,7 +298,6 @@ const botHandlers = {
     if (!p || targetId === room.lastGuardedId) return;
     room.nightActions.guardTarget = targetId;
     room.nightActions.guardSubmitted = true;
-    broadcastNightEffect(room, p, [targetId], 'guard');
     returnActorToSleepMat(p);
     if (checkEarlyNightComplete(room)) triggerNightLate(room);
     else broadcastRoom(room);
@@ -336,9 +310,6 @@ const botHandlers = {
       const t = room.players.find((x) => x.id === targetId && x.alive && !isWolfRole(x.role));
       if (!t) return;
       room.nightActions.wolfVotes[playerId] = targetId;
-      if (lock) {
-        broadcastNightEffect(room, p, [targetId], curseActive ? 'wolf_curse' : 'wolf_bite');
-      }
     }
     if (p.role === 'cursed_wolf' && !room.cursedUsed) {
       room.nightActions.curseActive = Boolean(curseActive);
@@ -366,7 +337,6 @@ const botHandlers = {
       targetName: target.name,
       isWolf: isWolfRole(target.role),
     });
-    broadcastNightEffect(room, p, [target.id], 'seer');
     returnActorToSleepMat(p);
     if (checkLateNightComplete(room)) triggerDawn(room);
     else broadcastRoom(room);
@@ -377,13 +347,11 @@ const botHandlers = {
     if (!p || room.nightActions.witchSubmitted) return;
     if (heal && p.witchHealLeft && room.nightActions.effectiveWolfVictim) {
       room.nightActions.witchHeal = true;
-      broadcastNightEffect(room, p, [room.nightActions.effectiveWolfVictim], 'witch_heal');
     }
     if (poisonTargetId && p.witchPoisonLeft) {
       const t = room.players.find((x) => x.id === poisonTargetId && x.alive);
       if (t) {
         room.nightActions.witchPoisonTarget = t.id;
-        broadcastNightEffect(room, p, [t.id], 'witch_poison');
       }
     }
     room.nightActions.witchSubmitted = true;

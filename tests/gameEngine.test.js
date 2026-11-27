@@ -322,6 +322,31 @@ test('Night stealth hides Wolf movement from sleeping Villagers while Dead Ghost
   assert.ok(room.positionResetSeq > seqBeforeDawn);
 });
 
+test('Night/Witch/Hunter death causes remain masked as unknown until GAME_OVER (prevents role leak)', () => {
+  const room = setup5PlayerRoom();
+  room.dayCount = 1;
+  enterNight(room);
+  room.nightActions.wolfVotes = { p4: 'p2' };
+  enterLateNight(room);
+  resolveNightToDawn(room);
+
+  // During DAWN & DAY_DISCUSS, living player p1 must NOT learn whether p2 died to wolf, witch poison, hunter, or love!
+  const dawnView = sanitizeRoomForPlayer(room, 'p1');
+  const p2Dawn = dawnView.players.find((p) => p.id === 'p2');
+  assert.equal(p2Dawn.alive, false);
+  assert.equal(p2Dawn.deathInfo.cause, 'unknown');
+  assert.equal(dawnView.pendingDeaths[0].cause, 'unknown');
+
+  room.phase = PHASES.DAY_DISCUSS;
+  const dayView = sanitizeRoomForPlayer(room, 'p1');
+  assert.equal(dayView.players.find((p) => p.id === 'p2').deathInfo.cause, 'unknown');
+
+  // Revealed only at GAME_OVER
+  room.phase = PHASES.GAME_OVER;
+  const endView = sanitizeRoomForPlayer(room, 'p1');
+  assert.equal(endView.players.find((p) => p.id === 'p2').deathInfo.cause, 'wolf');
+});
+
 test('assignFixedSleepSpots separates stacked players onto distinct bamboo mats without overlap', () => {
   const room = setup5PlayerRoom();
   // Force all 5 living villagers onto the exact same spot
