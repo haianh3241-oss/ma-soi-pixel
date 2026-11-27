@@ -61,6 +61,9 @@ export function usePlayerController({
   const meleeCdRef = useRef({ punchUntil: 0, kickUntil: 0 });
   const animCacheRef = useRef(new Map());
   const lastNetPacketRef = useRef({ x: -1, y: -1, z: -1, facing: 1, anim: '', at: 0 });
+  const lastResetSeqRef = useRef(room?.positionResetSeq ?? 0);
+  const returningToBedRef = useRef(null);
+  const prevCanMoveNightRef = useRef(false);
 
   const myId = me?.id || null;
   const phaseKey = `${room?.phase}-${room?.nightStage}-${room?.dayCount}`;
@@ -85,6 +88,15 @@ export function usePlayerController({
     if (!room?.players) return;
     const now = performance.now();
     const activeIds = new Set();
+    const resetChanged =
+      room.positionResetSeq !== undefined && room.positionResetSeq !== lastResetSeqRef.current;
+
+    if (resetChanged) {
+      lastResetSeqRef.current = room.positionResetSeq;
+      returningToBedRef.current = null;
+      waypointRef.current = null;
+      lastNetPacketRef.current = { x: -1, y: -1, z: -1, facing: 1, anim: '', at: 0 };
+    }
 
     for (const p of room.players) {
       if (p.isSpectator) continue;
@@ -113,11 +125,25 @@ export function usePlayerController({
       } else {
         existing.alive = p.alive;
         existing.wolfTransformed = Boolean(p.wolfTransformed);
-        if (p.id !== myId || !canMove) {
+
+        if (resetChanged) {
+          // Hard authoritative snap on Dawn / Night / Day / Trial transitions (0px leak!)
+          existing.x = p.x ?? existing.x;
+          existing.y = p.y ?? existing.y;
+          existing.z = p.z ?? 0;
+          existing.targetX = existing.x;
+          existing.targetY = existing.y;
+          existing.targetZ = existing.z;
+          existing.vz = 0;
+          existing.kx = 0;
+          existing.ky = 0;
+          existing.facing = p.facing ?? 1;
+          existing.anim = p.anim || 'idle';
+        } else if (p.id !== myId || (!canMove && !returningToBedRef.current)) {
           existing.targetX = p.x ?? existing.x;
           existing.targetY = p.y ?? existing.y;
           existing.targetZ = p.z ?? 0;
-          // Teleport snap if large phase jump (e.g. Dawn return to sleepOrigin or Trial formation)
+          // Teleport snap if large jump or local movement locked
           if (Math.hypot(existing.targetX - existing.x, existing.targetY - existing.y) > 250 || (!canMove && p.id === myId)) {
             existing.x = existing.targetX;
             existing.y = existing.targetY;
@@ -136,10 +162,27 @@ export function usePlayerController({
     for (const id of actorsRef.current.keys()) {
       if (!activeIds.has(id)) actorsRef.current.delete(id);
     }
-  }, [room?.players, myId, canMove]);
+  }, [room?.players, room?.positionResetSeq, myId, canMove]);
+
+  // Smoothly auto-run active night roles back onto their bamboo sleeping mat once they submit their night skill
+  useEffect(() => {
+    const inNight = room?.phase === 'NIGHT';
+    const myNightDone = Boolean(room?.selfPrivate?.myNightDone || room?.selfPrivate?.wolfLocked);
+    if (inNight && me?.alive && me?.sleepOrigin && actorsRef.current.has(me.id)) {
+      const hero = actorsRef.current.get(me.id);
+      const justFinishedTurn = (prevCanMoveNightRef.current && !canMove) || (myNightDone && !canMove);
+      if (justFinishedTurn && Math.hypot(me.sleepOrigin.x - hero.x, me.sleepOrigin.y - hero.y) > 14) {
+        returningToBedRef.current = { x: me.sleepOrigin.x, y: me.sleepOrigin.y };
+      }
+    } else if (!inNight) {
+      returningToBedRef.current = null;
+    }
+    prevCanMoveNightRef.current = Boolean(inNight && canMove);
+  }, [room?.phase, room?.nightStage, room?.selfPrivate?.myNightDone, room?.selfPrivate?.wolfLocked, canMove, me?.id, me?.alive, me?.sleepOrigin]);
 
   useEffect(() => {
     if (!me || !actorsRef.current.has(me.id)) return;
+    if (returningToBedRef.current) return;
     const local = actorsRef.current.get(me.id);
     local.x = me.x ?? local.x;
     local.y = me.y ?? local.y;
@@ -148,7 +191,7 @@ export function usePlayerController({
     local.ky = 0;
     local.targetX = local.x;
     local.targetY = local.y;
-  }, [room?.phase, room?.nightStage, me?.id]);
+  }, [room?.phase, room?.nightStage, room?.positionResetSeq, me?.id]);
 
   // Remote movement & melee socket listeners
   useEffect(() => {
@@ -401,98 +444,132 @@ export function usePlayerController({
         const hero = actorsRef.current.get(myId);
         const allowMoveNow = canMove && !isUiBlocked;
 
-        let { ix, iy } = allowMoveNow
-          ? resolveDirectionalAxes(horizStackRef.current, vertStackRef.current)
-          : { ix: 0, iy: 0 };
-        let isRunning = allowMoveNow && shiftCodesRef.current.size > 0;
-
-        if (allowMoveNow && joyRef.current.intensity > cfg.joystickDeadzone) {
-          ix += joyRef.current.x;
-          iy += joyRef.current.y;
-          if (joyRef.current.intensity > cfg.joystickRunThreshold) isRunning = true;
-        } else if (allowMoveNow && ix === 0 && iy === 0 && waypointRef.current) {
-          const dx = waypointRef.current.x - hero.x;
-          const dy = waypointRef.current.y - hero.y;
+        if (returningToBedRef.current) {
+          const bed = returningToBedRef.current;
+          const dx = bed.x - hero.x;
+          const dy = bed.y - hero.y;
           const dist = Math.hypot(dx, dy);
-          if (dist <= (waypointRef.current.arriveRadius || 22)) {
-            const cb = waypointRef.current.onArrive;
-            waypointRef.current = null;
-            cb?.();
+          if (dist <= 12) {
+            hero.x = bed.x;
+            hero.y = bed.y;
+            hero.z = 0;
+            hero.facing = 1;
+            hero.anim = 'sleep';
+            hero.wolfTransformed = false;
+            returningToBedRef.current = null;
           } else {
-            ix = dx / dist;
-            iy = dy / dist;
-            isRunning = Boolean(waypointRef.current.fast);
+            const retStep = stepActorPhysics(
+              hero,
+              { ix: dx / dist, iy: dy / dist, isRunning: true, lookDx: dx },
+              dt,
+              {
+                canMove: true,
+                isStunned: false,
+                ignoreObstacles: false,
+                speedOverride: cfg.walkSpeed * 1.15,
+              }
+            );
+            hero.x = retStep.x;
+            hero.y = retStep.y;
+            hero.z = 0;
+            hero.facing = retStep.facing;
+            hero.anim = 'run';
           }
-        }
+        } else {
+          let { ix, iy } = allowMoveNow
+            ? resolveDirectionalAxes(horizStackRef.current, vertStackRef.current)
+            : { ix: 0, iy: 0 };
+          let isRunning = allowMoveNow && shiftCodesRef.current.size > 0;
 
-        let speedMult = curSettings.speedMultiplier;
-        if (isWolfForm) speedMult *= cfg.nightWolfSpeedMultiplier;
-        else if (isGhostForm) speedMult *= cfg.ghostSpeedMultiplier;
-
-        const isStunned = now < hero.hitUntil;
-        const step = stepActorPhysics(
-          hero,
-          { ix, iy, isRunning, lookDx: lookVecRef.current.dx },
-          dt,
-          {
-            canMove: allowMoveNow,
-            isStunned,
-            ignoreObstacles: isGhostForm,
-            speedOverride: cfg.walkSpeed * speedMult,
+          if (allowMoveNow && joyRef.current.intensity > cfg.joystickDeadzone) {
+            ix += joyRef.current.x;
+            iy += joyRef.current.y;
+            if (joyRef.current.intensity > cfg.joystickRunThreshold) isRunning = true;
+          } else if (allowMoveNow && ix === 0 && iy === 0 && waypointRef.current) {
+            const dx = waypointRef.current.x - hero.x;
+            const dy = waypointRef.current.y - hero.y;
+            const dist = Math.hypot(dx, dy);
+            if (dist <= (waypointRef.current.arriveRadius || 22)) {
+              const cb = waypointRef.current.onArrive;
+              waypointRef.current = null;
+              cb?.();
+            } else {
+              ix = dx / dist;
+              iy = dy / dist;
+              isRunning = Boolean(waypointRef.current.fast);
+            }
           }
-        );
 
-        hero.x = step.x;
-        hero.y = step.y;
-        hero.z = step.z;
-        hero.vz = step.vz;
-        hero.kx = step.kx;
-        hero.ky = step.ky;
-        hero.facing = step.facing;
+          let speedMult = curSettings.speedMultiplier;
+          if (isWolfForm) speedMult *= cfg.nightWolfSpeedMultiplier;
+          else if (isGhostForm) speedMult *= cfg.ghostSpeedMultiplier;
 
-        if (step.justLanded) {
-          onDustBurst?.({ x: hero.x, y: hero.y, count: 5 });
-        } else if (step.isRunning && hero.z === 0 && !isGhostForm && now - lastDustAt > 140) {
-          lastDustAt = now;
-          onDustBurst?.({ x: hero.x - hero.facing * 12, y: hero.y, count: 2 });
-        }
+          const isStunned = now < hero.hitUntil;
+          const step = stepActorPhysics(
+            hero,
+            { ix, iy, isRunning, lookDx: lookVecRef.current.dx },
+            dt,
+            {
+              canMove: allowMoveNow,
+              isStunned,
+              ignoreObstacles: isGhostForm,
+              speedOverride: cfg.walkSpeed * speedMult,
+            }
+          );
 
-        let nextAnim = 'idle';
-        if (isGhostForm) nextAnim = 'ghost';
-        else if (!canMove && room?.phase === 'NIGHT' && me?.alive) nextAnim = 'sleep';
-        else if (now < hero.attackUntil) nextAnim = hero.attackType;
-        else if (now < hero.hitUntil) nextAnim = 'hit';
-        else if (hero.z > 3) nextAnim = 'jump';
-        else if (step.isRunning) nextAnim = 'run';
-        else if (step.isMoving) nextAnim = 'walk';
-        hero.anim = nextAnim;
+          hero.x = step.x;
+          hero.y = step.y;
+          hero.z = step.z;
+          hero.vz = step.vz;
+          hero.kx = step.kx;
+          hero.ky = step.ky;
+          hero.facing = step.facing;
 
-        // Delta-compressed network sync: send ONLY if moved >0.5u or discrete state changed!
-        const rx = Math.round(hero.x);
-        const ry = Math.round(hero.y);
-        const rz = Math.round(hero.z);
-        const prevNet = lastNetPacketRef.current;
-        const posChanged =
-          Math.abs(rx - prevNet.x) >= 1 ||
-          Math.abs(ry - prevNet.y) >= 1 ||
-          Math.abs(rz - prevNet.z) >= 1;
-        const stateChanged = prevNet.facing !== hero.facing || prevNet.anim !== hero.anim;
+          if (step.justLanded) {
+            onDustBurst?.({ x: hero.x, y: hero.y, count: 5 });
+          } else if (step.isRunning && hero.z === 0 && !isGhostForm && now - lastDustAt > 140) {
+            lastDustAt = now;
+            onDustBurst?.({ x: hero.x - hero.facing * 12, y: hero.y, count: 2 });
+          }
 
-        if (
-          socket?.connected &&
-          canMove &&
-          (stateChanged || (posChanged && now - prevNet.at >= sendIntervalMs))
-        ) {
-          lastNetPacketRef.current = { x: rx, y: ry, z: rz, facing: hero.facing, anim: hero.anim, at: now };
-          socket.emit('player:move', {
-            x: rx,
-            y: ry,
-            z: rz,
-            vx: Math.round(step.vx),
-            vy: Math.round(step.vy),
-            facing: hero.facing,
-            anim: hero.anim,
-          });
+          let nextAnim = 'idle';
+          if (isGhostForm) nextAnim = 'ghost';
+          else if (!canMove && room?.phase === 'NIGHT' && me?.alive) nextAnim = 'sleep';
+          else if (now < hero.attackUntil) nextAnim = hero.attackType;
+          else if (now < hero.hitUntil) nextAnim = 'hit';
+          else if (hero.z > 3) nextAnim = 'jump';
+          else if (step.isRunning) nextAnim = 'run';
+          else if (step.isMoving) nextAnim = 'walk';
+          hero.anim = nextAnim;
+
+          // Delta-compressed network sync: attach room.phase so server rejects stale cross-phase packets
+          const rx = Math.round(hero.x);
+          const ry = Math.round(hero.y);
+          const rz = Math.round(hero.z);
+          const prevNet = lastNetPacketRef.current;
+          const posChanged =
+            Math.abs(rx - prevNet.x) >= 1 ||
+            Math.abs(ry - prevNet.y) >= 1 ||
+            Math.abs(rz - prevNet.z) >= 1;
+          const stateChanged = prevNet.facing !== hero.facing || prevNet.anim !== hero.anim;
+
+          if (
+            socket?.connected &&
+            canMove &&
+            (stateChanged || (posChanged && now - prevNet.at >= sendIntervalMs))
+          ) {
+            lastNetPacketRef.current = { x: rx, y: ry, z: rz, facing: hero.facing, anim: hero.anim, at: now };
+            socket.emit('player:move', {
+              phase: room?.phase,
+              x: rx,
+              y: ry,
+              z: rz,
+              vx: Math.round(step.vx),
+              vy: Math.round(step.vy),
+              facing: hero.facing,
+              anim: hero.anim,
+            });
+          }
         }
       }
 
@@ -524,15 +601,17 @@ export function usePlayerController({
 
           if (dom.body) {
             const floatBob = !actor.alive ? 12 + Math.sin(now * 0.0045 + actor.x * 0.01) * 5 : 0;
-            const liftY = -(actor.z + floatBob);
-            dom.body.style.transform = `translate3d(0, ${liftY.toFixed(1)}px, 0) scaleX(${actor.facing})`;
+            const isSleepPose = actor.anim === 'sleep';
+            const liftY = isSleepPose ? 0 : -(actor.z + floatBob);
+            const renderFacing = isSleepPose ? 1 : actor.facing;
+            dom.body.style.transform = `translate3d(0, ${liftY.toFixed(1)}px, 0) scaleX(${renderFacing})`;
           }
 
           if (dom.shadow) {
             const heightOffset = actor.z + (!actor.alive ? 16 : 0);
             const sScale = Math.max(0.45, 1 - heightOffset / 240);
             dom.shadow.style.transform = `translate3d(-50%, 0, 0) scale(${sScale.toFixed(2)})`;
-            dom.shadow.style.opacity = !actor.alive ? '0.24' : '0.48';
+            dom.shadow.style.opacity = actor.anim === 'sleep' ? '0.15' : !actor.alive ? '0.24' : '0.48';
           }
         }
 

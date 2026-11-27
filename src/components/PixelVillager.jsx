@@ -1,7 +1,12 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { sfx } from '../audio/sfx.js';
 import { ASSET_PATHS } from '../../graphics-pack/themeConfig.js';
-import { VILLAGER_MOTION, getVillagerMotion } from '../data/villagerMotion.js';
+import {
+  VILLAGER_MOTION,
+  getVillagerMotion,
+  isVillagerRigReady,
+  subscribeRigReady,
+} from '../data/villagerMotion.js';
 import VillagerPuppetRig from './VillagerPuppetRig.jsx';
 
 export const POKE_EFFECTS = VILLAGER_MOTION;
@@ -36,6 +41,8 @@ export default function PixelVillager({
   const [reactingPlayId, setReactingPlayId] = useState(null);
   const [sleepFallback, setSleepFallback] = useState(false);
   const [poseFallback, setPoseFallback] = useState(false);
+  const [ghostFallback, setGhostFallback] = useState(false);
+  const [rigReady, setRigReady] = useState(() => isVillagerRigReady(avatarId));
 
   const playCounterRef = useRef(0);
   const lastEmoteKeyRef = useRef(emoteKey);
@@ -49,8 +56,18 @@ export default function PixelVillager({
   useEffect(() => {
     setSleepFallback(false);
     setPoseFallback(false);
+    setGhostFallback(false);
     setReactingPlayId(null);
+    setRigReady(isVillagerRigReady(avatarId));
   }, [avatarId, animState, wolfFormRole]);
+
+  useEffect(() => {
+    if (rigReady) return undefined;
+    const slug = motion.slug;
+    return subscribeRigReady((loadedSlug) => {
+      if (loadedSlug === slug) setRigReady(true);
+    });
+  }, [rigReady, motion.slug]);
 
   useEffect(() => () => clearMotionTimers(), [clearMotionTimers]);
 
@@ -124,17 +141,17 @@ export default function PixelVillager({
   const isWolfEyes = alive && (eyeState === 'wolf' || Boolean(wolfFormRole));
 
   const puppetPose =
-    !still && !isReacting && !wolfFormRole
-      ? isGhostRender
-        ? 'walk'
-        : alive && !isSleeping && ['walk', 'run', 'jump', 'punch', 'kick', 'hit'].includes(animState)
-          ? animState
-          : null
+    !still && !isReacting && !wolfFormRole && !isGhostRender && !isSleeping && rigReady
+      ? alive && ['walk', 'run', 'jump', 'punch', 'kick', 'hit'].includes(animState)
+        ? animState
+        : null
       : null;
 
   let spriteSrc;
   if (!alive && !isGhostRender) {
     spriteSrc = ASSET_PATHS.ghostTombstone;
+  } else if (isGhostRender && !ghostFallback) {
+    spriteSrc = ASSET_PATHS.characterGhost(avatarId);
   } else if (still) {
     spriteSrc = ASSET_PATHS.characterIcon(avatarId);
   } else if (wolfFormRole && alive) {
@@ -157,15 +174,15 @@ export default function PixelVillager({
     spriteSrc = ASSET_PATHS.characterIdle(avatarId);
   }
 
-  const motionClass = !alive && !isGhostRender
+  const motionClass = isGhostRender || (!alive && !isGhostRender)
     ? 'anim-ghost'
     : activeBurst
       ? activeBurst.animClass || motion.animClass || 'anim-poke-tickle'
       : isReacting
         ? ''
-        : isSleeping
-          ? 'anim-sleep-nod'
-          : isSpeaking
+        : !rigReady && alive && (animState === 'walk' || animState === 'run')
+          ? 'anim-talk-active'
+          : isSpeaking && !isSleeping
             ? 'anim-talk-active'
             : '';
 
@@ -190,8 +207,8 @@ export default function PixelVillager({
         />
       )}
 
-      {/* Ghost Spirit Mist Tail below translucent character */}
-      {isGhostRender && (
+      {/* Fallback mist aura ONLY if custom character ghost.png failed */}
+      {isGhostRender && ghostFallback && (
         <img
           src={ASSET_PATHS.ghostTailAura}
           alt=""
@@ -316,29 +333,35 @@ export default function PixelVillager({
           />
         </div>
       ) : (
-        <picture className="relative z-10 w-full h-full flex items-end justify-center">
-          {alive && !wolfFormRole && !isAttacking && !isHitstun && (
+        <picture
+          className={`relative z-10 w-full h-full flex items-end justify-center ${
+            isSleeping ? 'anim-sleep-lie' : ''
+          }`}
+        >
+          {alive && !wolfFormRole && !isAttacking && !isHitstun && !isSleeping && (
             <source media="(prefers-reduced-motion: reduce)" srcSet={ASSET_PATHS.characterIcon(avatarId)} />
           )}
           <img
             src={spriteSrc}
             alt={motion.name}
             draggable={false}
+            decoding="async"
             onError={() => {
-              if (isSleeping && !sleepFallback) setSleepFallback(true);
+              if (isGhostRender && !ghostFallback) setGhostFallback(true);
+              else if (isSleeping && !sleepFallback) setSleepFallback(true);
               else if ((isAttacking || isHitstun) && !poseFallback) setPoseFallback(true);
             }}
             className={`w-full h-full object-contain select-none ${isWolfEyes ? 'wolf-eye-glow' : ''}`}
             style={{
-              opacity: isGhostRender ? 0.68 : 1,
+              opacity: isGhostRender ? 0.86 : 1,
               filter: isGhostRender
-                ? 'drop-shadow(0 0 10px rgba(56,189,248,0.85)) brightness(1.08)'
+                ? 'drop-shadow(0 0 10px rgba(56,189,248,0.85)) brightness(1.06)'
                 : isHitstun
                   ? 'brightness(1.7)'
                   : isAccused
                     ? 'drop-shadow(0 0 10px rgba(239,68,68,0.95))'
                     : isNight && isSleeping
-                      ? 'brightness(0.76) saturate(0.88)'
+                      ? 'brightness(0.84) saturate(0.92)'
                       : undefined,
             }}
           />

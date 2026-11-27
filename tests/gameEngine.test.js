@@ -285,21 +285,24 @@ test('Night stealth hides Wolf movement from sleeping Villagers while Dead Ghost
   room.players[3].role = 'cursed_wolf';
   room.players[4].role = 'seer';
 
-  room.players[3].x = 400;
-  room.players[3].y = 400;
+  // Place all sleepers clearly separated on distinct spots, with p4 at (420, 420)
+  room.players[0].x = 1200; room.players[0].y = 500;
+  room.players[1].x = 1150; room.players[1].y = 690;
+  room.players[3].x = 420;  room.players[3].y = 420;
+  room.players[4].x = 550;  room.players[4].y = 730;
   enterNight(room);
-  assert.deepEqual(room.players[3].sleepOrigin, { x: 400, y: 400 });
+  const wolfOrigin = { ...room.players[3].sleepOrigin };
 
   // Wolf walks across the courtyard toward p2's sleep spot
   room.players[3].x = 950;
   room.players[3].y = 680;
   room.players[3].anim = 'walk';
 
-  // Living villager p2 must ONLY see wolf at sleepOrigin (400, 400) & sleep pose, NEVER live position or wolf form!
+  // Living villager p2 must ONLY see wolf at sleepOrigin & sleep pose, NEVER live position or wolf form!
   const villagerView = sanitizeRoomForPlayer(room, 'p2');
   const wolfSeenByVillager = villagerView.players.find((p) => p.id === 'p4');
-  assert.equal(wolfSeenByVillager.x, 400);
-  assert.equal(wolfSeenByVillager.y, 400);
+  assert.equal(wolfSeenByVillager.x, wolfOrigin.x);
+  assert.equal(wolfSeenByVillager.y, wolfOrigin.y);
   assert.equal(wolfSeenByVillager.anim, 'sleep');
   assert.equal(wolfSeenByVillager.wolfTransformed, false);
 
@@ -310,9 +313,29 @@ test('Night stealth hides Wolf movement from sleeping Villagers while Dead Ghost
   assert.equal(wolfSeenByGhost.y, 680);
   assert.equal(wolfSeenByGhost.wolfTransformed, true);
 
-  // Dawn restores wolf back to sleepOrigin (400, 400)
+  // Dawn restores wolf back to sleepOrigin and bumps positionResetSeq
+  const seqBeforeDawn = room.positionResetSeq;
   enterLateNight(room);
   resolveNightToDawn(room);
-  assert.equal(room.players[3].x, 400);
-  assert.equal(room.players[3].y, 400);
+  assert.equal(room.players[3].x, wolfOrigin.x);
+  assert.equal(room.players[3].y, wolfOrigin.y);
+  assert.ok(room.positionResetSeq > seqBeforeDawn);
+});
+
+test('assignFixedSleepSpots separates stacked players onto distinct bamboo mats without overlap', () => {
+  const room = setup5PlayerRoom();
+  // Force all 5 living villagers onto the exact same spot
+  for (const p of room.players) {
+    p.x = 800;
+    p.y = 700;
+  }
+  enterNight(room);
+  for (let i = 0; i < room.players.length; i++) {
+    for (let j = i + 1; j < room.players.length; j++) {
+      const a = room.players[i].sleepOrigin;
+      const b = room.players[j].sleepOrigin;
+      const dist = Math.hypot(a.x - b.x, a.y - b.y);
+      assert.ok(dist >= 75, `Sleep mats ${i} & ${j} overlapped: dist=${dist}`);
+    }
+  }
 });

@@ -17,6 +17,11 @@ import {
 } from '../src/engine/physics2d.js';
 import { VILLAGER_MOTION } from '../src/data/villagerMotion.js';
 import { VILLAGER_PARTS_META } from '../src/data/villagerRigConfig.js';
+import {
+  DEFAULT_TOUCH_HUD_CONFIG,
+  mirrorTouchHudPositions,
+  normalizeTouchHudConfig,
+} from '../src/utils/touchHudConfig.js';
 
 test('Vector2 normalization prevents faster diagonal movement and stops instantly on zero input', () => {
   const straight = normalizeInputVector(1, 0);
@@ -100,4 +105,33 @@ test('SOCD Last-Key Priority resolves opposite directional keys cleanly without 
   assert.deepEqual(resolveDirectionalAxes(['KeyA', 'KeyD'], []), { ix: 1, iy: 0 });
   assert.deepEqual(resolveDirectionalAxes(['KeyA'], ['KeyW', 'KeyS']), { ix: -1, iy: 1 });
   assert.deepEqual(resolveDirectionalAxes([], []), { ix: 0, iy: 0 });
+});
+
+test('All 22 villagers have bespoke ghost.png sprites and sleeping_mat.png prop exists', () => {
+  const matPath = path.resolve('graphics-pack/assets/props/sleeping_mat.png');
+  assert.ok(fs.existsSync(matPath), `Missing sleeping mat prop at ${matPath}`);
+  const entries = Object.values(VILLAGER_MOTION);
+  assert.equal(entries.length, 22);
+  for (const m of entries) {
+    const gp = path.resolve('graphics-pack/assets/ma-cho', m.slug, 'ghost.png');
+    assert.ok(fs.existsSync(gp), `Missing character ghost sprite at ${gp}`);
+  }
+});
+
+test('Touch HUD config normalizes bounds cleanly and mirrors left/right-handed layouts', () => {
+  const norm = normalizeTouchHudConfig({
+    joystickMode: 'floating',
+    buttonScale: 99,
+    opacity: 0.01,
+    positions: { jump: { xPct: 200, yPct: -10 } },
+  });
+  assert.equal(norm.buttonScale, 1.35);
+  assert.equal(norm.opacity, 0.35);
+  assert.equal(norm.positions.jump.xPct, 93);
+  assert.equal(norm.positions.jump.yPct, 18);
+
+  const mirrored = mirrorTouchHudPositions(DEFAULT_TOUCH_HUD_CONFIG);
+  assert.equal(mirrored.leftHanded, true);
+  assert.ok(mirrored.positions.joystick.xPct > 50);
+  assert.ok(mirrored.positions.jump.xPct < 50);
 });

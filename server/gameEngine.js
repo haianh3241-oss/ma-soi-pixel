@@ -1,10 +1,12 @@
 import { PHASES, ROLES, VILLAGERS, getBalancedRoles } from '../shared/constants.js';
 import {
+  ARENA_WALKABLE_BOUNDS,
   DEFAULT_MOVEMENT_CONFIG,
   GALLOWS_POS,
   getRingSpawnPosition,
   getTrialAudiencePosition,
 } from '../src/engine/movementConfig.js';
+import { resolveWorldCollisions } from '../src/engine/physics2d.js';
 
 function shuffle(arr) {
   const a = [...arr];
@@ -32,6 +34,7 @@ export function createRoom(hostPlayer, code) {
     nightStage: null, // 'EARLY' | 'LATE'
     dayCount: 0,
     phaseEndsAt: null,
+    positionResetSeq: 1,
     extensionUsedToday: false,
     players: [hostPlayer],
     settings: {
@@ -221,6 +224,7 @@ export function startGame(room) {
   room.phase = PHASES.ROLE_REVEAL;
   room.nightStage = null;
   room.dayCount = 1;
+  room.positionResetSeq = (room.positionResetSeq || 0) + 1;
   room.extensionUsedToday = false;
   room.lovers = [];
   room.lastGuardedId = null;
@@ -260,6 +264,89 @@ export function startGame(room) {
   return { ok: true };
 }
 
+export function assignFixedSleepSpots(players) {
+  const sleepers = players.filter((p) => !p.isSpectator && p.alive);
+  if (sleepers.length === 0) return;
+
+  const sleepBounds = {
+    ...ARENA_WALKABLE_BOUNDS,
+    minY: Math.max(ARENA_WALKABLE_BOUNDS.minY, 328), // Keep sleeping mats below Gallows roof
+  };
+
+  const spots = sleepers.map((p, idx) => {
+    const fallback = getRingSpawnPosition(idx, sleepers.length, 0.92);
+    const startX = Number.isFinite(p.x) ? p.x : fallback.x;
+    const startY = Number.isFinite(p.y) ? p.y : fallback.y;
+    const clean = resolveWorldCollisions(startX, startY, 38, { bounds: sleepBounds });
+    return { p, x: clean.x, y: clean.y };
+  });
+
+  // De-overlap any sleepers standing close together so every bamboo mat has its own clean spot
+  const minSep = 88;
+  for (let pass = 0; pass < 16; pass++) {
+    for (let i = 0; i < spots.length; i++) {
+      for (let j = i + 1; j < spots.length; j++) {
+        const dx = spots[j].x - spots[i].x;
+        const dy = spots[j].y - spots[i].y;
+        const dist = Math.hypot(dx, dy);
+        if (dist < minSep) {
+          const push = (minSep - dist) * 0.52;
+          const angle = dist > 1e-3 ? Math.atan2(dy, dx) : (i * 1.7 + j * 2.3);
+          const nx = Math.cos(angle);
+          const ny = Math.sin(angle);
+          spots[i].x -= nx * push;
+          spots[i].y -= ny * push;
+          spots[j].x += nx * push;
+          spots[j].y += ny * push;
+        }
+      }
+      const bounded = resolveWorldCollisions(spots[i].x, spots[i].y, 38, { bounds: sleepBounds });
+      spots[i].x = bounded.x;
+      spots[i].y = bounded.y;
+    }
+  }
+
+  for (const s of spots) {
+    const rx = Math.round(s.x);
+    const ry = Math.round(s.y);
+    s.p.sleepOrigin = { x: rx, y: ry };
+    s.p.x = rx;
+    s.p.y = ry;
+    s.p.z = 0;
+    s.p.facing = rx <= 800 ? 1 : -1;
+    s.p.anim = isWolfRole(s.p.role) ? 'idle' : 'sleep';
+    if ('botTarget' in s.p) s.p.botTarget = null;
+  }
+}
+
+export function returnActorToSleepMat(player) {
+  if (!player || player.isSpectator || !player.alive) return;
+  if (player.sleepOrigin && Number.isFinite(player.sleepOrigin.x) && Number.isFinite(player.sleepOrigin.y)) {
+    player.x = player.sleepOrigin.x;
+    player.y = player.sleepOrigin.y;
+  }
+  player.z = 0;
+  player.anim = 'sleep';
+  player.facing = (player.x ?? 800) <= 800 ? 1 : -1;
+  if ('botTarget' in player) player.botTarget = null;
+}
+
+export function restoreAllLivingToSleepOrigin(room, anim = 'idle') {
+  for (const p of room.players) {
+    if (!p.isSpectator && p.alive) {
+      if (p.sleepOrigin && Number.isFinite(p.sleepOrigin.x) && Number.isFinite(p.sleepOrigin.y)) {
+        p.x = p.sleepOrigin.x;
+        p.y = p.sleepOrigin.y;
+      }
+      p.z = 0;
+      p.anim = anim;
+      p.facing = (p.x ?? 800) <= 800 ? 1 : -1;
+      if ('botTarget' in p) p.botTarget = null;
+    }
+  }
+  room.positionResetSeq = (room.positionResetSeq || 0) + 1;
+}
+
 export function enterNight(room) {
   room.phase = PHASES.NIGHT;
   room.nightStage = 'EARLY';
@@ -270,20 +357,14 @@ export function enterNight(room) {
   room.verdictVotes = {};
   room.extensionUsedToday = false;
 
-  // Save sleepOrigin for every living villager so dawn restores them cleanly
-  for (const p of room.players) {
-    if (!p.isSpectator && p.alive) {
-      p.sleepOrigin = { x: Math.round(p.x ?? 800), y: Math.round(p.y ?? 700) };
-      p.z = 0;
-      p.anim = isWolfRole(p.role) ? 'idle' : 'sleep';
-    }
-  }
+  assignFixedSleepSpots(room.players);
+  room.positionResetSeq = (room.positionResetSeq || 0) + 1;
 
   room.publicLogs.push({
     id: Date.now() + Math.random(),
     day: room.dayCount,
     type: 'night',
-    text: `🌙 Đêm thứ ${room.dayCount} buông xuống. Cả làng chìm vào giấc ngủ...`,
+    text: `🌙 Đêm thứ ${room.dayCount} buông xuống. Cả làng trải chiếu chìm vào giấc ngủ...`,
   });
 }
 
@@ -365,6 +446,13 @@ export function enterLateNight(room) {
 
   room.nightStage = 'LATE';
   room.skipVotes = [];
+
+  // Return all Early-night movers (Wolves, Guard, Cupid) back onto their fixed sleeping mats
+  for (const p of room.players) {
+    if (!p.isSpectator && p.alive) {
+      returnActorToSleepMat(p);
+    }
+  }
 }
 
 export function checkLateNightComplete(room) {
@@ -443,18 +531,8 @@ export function resolveNightToDawn(room) {
   // Apply deaths + lover chain + elder penalty
   const finalDeaths = applyDeathsWithChains(room, deaths, 'NIGHT');
 
-  // Restore all surviving villagers back to their sleepOrigin and turn wolves back into villagers!
-  for (const p of room.players) {
-    if (!p.isSpectator && p.alive) {
-      if (p.sleepOrigin && Number.isFinite(p.sleepOrigin.x) && Number.isFinite(p.sleepOrigin.y)) {
-        p.x = p.sleepOrigin.x;
-        p.y = p.sleepOrigin.y;
-      }
-      p.z = 0;
-      p.anim = 'idle';
-      p.facing = p.x <= 800 ? 1 : -1;
-    }
-  }
+  // Restore all surviving villagers back to their exact sleepOrigin and turn wolves back into villagers!
+  restoreAllLivingToSleepOrigin(room, 'idle');
 
   room.phase = PHASES.DAWN;
   room.nightStage = null;
@@ -838,7 +916,9 @@ export function canPlayerMoveNow(room, player) {
     return true;
   }
   if (room.phase === PHASES.NIGHT) {
-    if (isWolfRole(player.role)) return true;
+    if (room.nightStage === 'EARLY' && isWolfRole(player.role) && !room.nightActions.wolfLocked) {
+      return true;
+    }
     if (room.villagePowersLost) return false;
     if (room.nightStage === 'EARLY') {
       if (player.role === 'cupid' && room.dayCount === 1 && room.nightActions.cupidTargets.length < 2) return true;
@@ -895,6 +975,7 @@ export function arrangeTrialFormation(room) {
     accused.anim = 'emote';
     accused.facing = 1;
   }
+  room.positionResetSeq = (room.positionResetSeq || 0) + 1;
 }
 
 export function sanitizeRoomForPlayer(room, viewerId) {
@@ -907,12 +988,14 @@ export function sanitizeRoomForPlayer(room, viewerId) {
 
   const players = room.players.map((p) => {
     const showRole = isGameOver || viewerIsDead || p.id === viewerId || (viewerIsWolf && isWolfRole(p.role));
+    const playerMovingAtNight = isNight && p.alive && canPlayerMoveNow(room, p);
     const canSeeLivePos =
       !isNight
         ? p.alive || viewerIsDead || isGameOver
-        : canSeeNightOmniscient ||
-          p.id === viewerId ||
-          (viewerIsWolf && viewer.alive && p.alive && isWolfRole(p.role));
+        : !p.alive
+          ? viewerIsDead || isGameOver
+          : playerMovingAtNight &&
+            (canSeeNightOmniscient || p.id === viewerId || (viewerIsWolf && viewer.alive && isWolfRole(p.role)));
 
     const visX = canSeeLivePos ? (p.x ?? 800) : (p.sleepOrigin?.x ?? p.x ?? 800);
     const visY = canSeeLivePos ? (p.y ?? 700) : (p.sleepOrigin?.y ?? p.y ?? 700);
@@ -920,6 +1003,8 @@ export function sanitizeRoomForPlayer(room, viewerId) {
     const visAnim = canSeeLivePos ? (p.anim || 'idle') : p.alive ? 'sleep' : 'ghost';
     const wolfTransformed = Boolean(
       isNight &&
+        room.nightStage === 'EARLY' &&
+        !room.nightActions?.wolfLocked &&
         p.alive &&
         isWolfRole(p.role) &&
         (canSeeNightOmniscient || p.id === viewerId || (viewerIsWolf && viewer.alive))
@@ -1027,6 +1112,7 @@ export function sanitizeRoomForPlayer(room, viewerId) {
     nightStage: room.nightStage,
     dayCount: room.dayCount,
     phaseEndsAt: room.phaseEndsAt,
+    positionResetSeq: room.positionResetSeq || 0,
     extensionUsedToday: room.extensionUsedToday,
     settings: room.settings,
     players,

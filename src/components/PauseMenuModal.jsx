@@ -1,11 +1,12 @@
 import React from 'react';
-import { X, SlidersHorizontal, Gamepad2, LogOut, RotateCcw } from 'lucide-react';
+import { X, SlidersHorizontal, Gamepad2, LogOut, RotateCcw, Smartphone } from 'lucide-react';
 import { DEFAULT_MOVEMENT_CONFIG } from '../engine/movementConfig.js';
 
 export default function PauseMenuModal({
   open,
   settings,
   onChangeSettings,
+  onOpenTouchEditor,
   onOpenAudioMixer,
   onLeaveRoom,
   onClose,
@@ -105,6 +106,20 @@ export default function PauseMenuModal({
               <option value="off">Ẩn</option>
             </select>
           </div>
+
+          {onOpenTouchEditor && (
+            <button
+              type="button"
+              onClick={() => {
+                onClose();
+                onOpenTouchEditor();
+              }}
+              className="ggd-btn bg-sky-500/20 border-sky-400 text-sky-200 px-3 py-2 text-xs w-full mt-1"
+            >
+              <Smartphone className="w-4 h-4" />
+              <span>Tùy Chỉnh Vị Trí, Cỡ & Độ Rõ Nút Cảm Ứng</span>
+            </button>
+          )}
         </div>
 
         {/* Controls Reference Table */}

@@ -24,6 +24,8 @@ import {
   getAlivePlayers,
   isWolfRole,
   resolveNightToDawn,
+  restoreAllLivingToSleepOrigin,
+  returnActorToSleepMat,
   sanitizeRoomForPlayer,
   startGame,
   tallyDayNomination,
@@ -225,6 +227,7 @@ function enterDayDiscuss(room) {
   room.accusedId = null;
   room.verdictVotes = {};
   room.extensionUsedToday = false;
+  restoreAllLivingToSleepOrigin(room, 'idle');
   setPhaseTimer(room, room.settings.discussSeconds * 1000, () => finishDayDiscuss(room));
   broadcastRoom(room);
   scheduleBotActions(room, botHandlers);
@@ -310,6 +313,7 @@ const botHandlers = {
     if (!p || targets.length !== 2 || targets[0] === targets[1]) return;
     room.nightActions.cupidTargets = targets;
     broadcastNightEffect(room, p, targets, 'cupid');
+    returnActorToSleepMat(p);
     if (checkEarlyNightComplete(room)) triggerNightLate(room);
     else broadcastRoom(room);
   },
@@ -320,6 +324,7 @@ const botHandlers = {
     room.nightActions.guardTarget = targetId;
     room.nightActions.guardSubmitted = true;
     broadcastNightEffect(room, p, [targetId], 'guard');
+    returnActorToSleepMat(p);
     if (checkEarlyNightComplete(room)) triggerNightLate(room);
     else broadcastRoom(room);
   },
@@ -341,6 +346,9 @@ const botHandlers = {
     const aliveCursed = getAlivePlayers(room).some((w) => w.role === 'cursed_wolf' && !room.cursedUsed);
     if (lock && (!aliveCursed || p.role === 'cursed_wolf')) {
       room.nightActions.wolfLocked = true;
+      for (const w of room.players) {
+        if (w.alive && isWolfRole(w.role)) returnActorToSleepMat(w);
+      }
     }
     if (checkEarlyNightComplete(room)) triggerNightLate(room);
     else broadcastRoom(room);
@@ -359,6 +367,7 @@ const botHandlers = {
       isWolf: isWolfRole(target.role),
     });
     broadcastNightEffect(room, p, [target.id], 'seer');
+    returnActorToSleepMat(p);
     if (checkLateNightComplete(room)) triggerDawn(room);
     else broadcastRoom(room);
   },
@@ -378,6 +387,7 @@ const botHandlers = {
       }
     }
     room.nightActions.witchSubmitted = true;
+    returnActorToSleepMat(p);
     if (checkLateNightComplete(room)) triggerDawn(room);
     else broadcastRoom(room);
   },
@@ -618,6 +628,7 @@ io.on('connection', (socket) => {
       p.convertedOnDay = null;
     }
     assignLobbyRingPositions(ctx.room.players);
+    ctx.room.positionResetSeq = (ctx.room.positionResetSeq || 0) + 1;
     ctx.room.settings.roleCounts = getBalancedRoles(ctx.room.players.length);
     broadcastRoom(ctx.room);
   });
@@ -795,10 +806,11 @@ io.on('connection', (socket) => {
     botHandlers.sendInteraction(ctx.room, ctx.player.id, targetId, itemId);
   });
 
-  socket.on('player:move', ({ x, y, z, vx, vy, facing, anim }) => {
+  socket.on('player:move', ({ phase: pktPhase, x, y, z, vx, vy, facing, anim }) => {
     const ctx = getCtx();
     if (!ctx) return;
     const { room, player } = ctx;
+    if (pktPhase && pktPhase !== room.phase) return;
     if (!canPlayerMoveNow(room, player)) return;
 
     const resolved = resolveWorldCollisions(Number(x), Number(y), DEFAULT_MOVEMENT_CONFIG.colliderRadius, {

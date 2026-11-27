@@ -1,5 +1,6 @@
 // Bảng kịch bản chuyển động & tài nguyên đồng bộ từ Ma-Cho-Character-Kit cho 22 dân làng
 // Giữ nguyên avatarId nội bộ của server (drunkard..shepherd), ánh xạ sang slug thư mục /ma-cho/<slug>/
+import { VILLAGER_PARTS_META } from './villagerRigConfig.js';
 
 export const VILLAGER_MOTION = {
   drunkard: {
@@ -345,15 +346,65 @@ export function getVillagerMotion(avatarId) {
 }
 
 const preloadedIds = new Set();
+const rigReadySlugs = new Set();
+const rigListeners = new Set();
+
+export function isVillagerRigReady(avatarId) {
+  const slug = getVillagerMotion(avatarId).slug;
+  return rigReadySlugs.has(slug);
+}
+
+export function subscribeRigReady(cb) {
+  rigListeners.add(cb);
+  return () => rigListeners.delete(cb);
+}
+
 export function preloadRoomVillagers(avatarIds = []) {
   if (typeof window === 'undefined') return;
-  for (const id of avatarIds) {
-    if (!id || preloadedIds.has(id)) continue;
-    const cfg = getVillagerMotion(id);
-    preloadedIds.add(id);
-    ['/ma-cho/' + cfg.slug + '/idle.webp', '/ma-cho/' + cfg.slug + '/emote.webp', '/ma-cho/' + cfg.slug + '/sleep.png'].forEach((src) => {
-      const img = new Image();
-      img.src = src;
-    });
+  const run = () => {
+    for (const id of avatarIds) {
+      if (!id || preloadedIds.has(id)) continue;
+      const cfg = getVillagerMotion(id);
+      preloadedIds.add(id);
+
+      const baseUrls = [
+        `/ma-cho/${cfg.slug}/idle.webp`,
+        `/ma-cho/${cfg.slug}/sleep.png`,
+        `/ma-cho/${cfg.slug}/ghost.png`,
+      ];
+      baseUrls.forEach((src) => {
+        const img = new Image();
+        img.decoding = 'async';
+        img.src = src;
+      });
+
+      const partsMeta = VILLAGER_PARTS_META[cfg.slug] || {};
+      const partKeys = Object.keys(partsMeta);
+      if (partKeys.length === 0) continue;
+
+      let remaining = partKeys.length;
+      const markOneLoaded = () => {
+        remaining -= 1;
+        if (remaining <= 0 && !rigReadySlugs.has(cfg.slug)) {
+          rigReadySlugs.add(cfg.slug);
+          rigListeners.forEach((fn) => fn(cfg.slug));
+        }
+      };
+
+      for (const part of partKeys) {
+        const img = new Image();
+        img.decoding = 'async';
+        img.onload = markOneLoaded;
+        img.onerror = markOneLoaded;
+        img.src = `/ma-cho/${cfg.slug}/parts/${part}.png`;
+        if (img.complete) markOneLoaded();
+      }
+    }
+  };
+
+  if (typeof window.requestIdleCallback === 'function') {
+    window.requestIdleCallback(run, { timeout: 600 });
+  } else {
+    setTimeout(run, 16);
   }
 }

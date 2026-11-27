@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Bot, Check, Copy, Pause, Play, Settings, SlidersHorizontal, Tag, Vote, X } from 'lucide-react';
+import { Bot, Check, Copy, Pause, Play, Settings, SlidersHorizontal, Smartphone, Tag, Vote, X } from 'lucide-react';
 import { INTERACTIONS, PHASES, SUSPECT_TAGS } from '../../shared/constants.js';
 import { ASSET_PATHS } from '../../graphics-pack/themeConfig.js';
 import PixelVillager from './PixelVillager.jsx';
@@ -7,7 +7,9 @@ import VillagerPuppetRig from './VillagerPuppetRig.jsx';
 import GallowsStage from './GallowsStage.jsx';
 import VirtualJoystick from './VirtualJoystick.jsx';
 import PauseMenuModal from './PauseMenuModal.jsx';
+import TouchHudEditorModal from './TouchHudEditorModal.jsx';
 import AmongUsVoteModal from './AmongUsVoteModal.jsx';
+import { loadTouchHudConfig, saveTouchHudConfig } from '../utils/touchHudConfig.js';
 import {
   ARENA_COLLIDERS,
   ARENA_WALKABLE_BOUNDS,
@@ -153,6 +155,8 @@ export default function VillageArena({
   const [seerToast, setSeerToast] = useState(null);
   const [dismissedConvertDay, setDismissedConvertDay] = useState(null);
   const [pauseOpen, setPauseOpen] = useState(false);
+  const [touchEditorOpen, setTouchEditorOpen] = useState(false);
+  const [touchHudConfig, setTouchHudConfig] = useState(() => loadTouchHudConfig());
   const [voteModalOpen, setVoteModalOpen] = useState(false);
   const [lobbyError, setLobbyError] = useState('');
   const [controlsHintOpen, setControlsHintOpen] = useState(true);
@@ -170,6 +174,12 @@ export default function VillageArena({
     const touch = typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0);
     setIsTouchDevice(Boolean(touch));
   }, []);
+
+  useEffect(() => {
+    if (!controlsHintOpen) return undefined;
+    const t = setTimeout(() => setControlsHintOpen(false), 8500);
+    return () => clearTimeout(t);
+  }, [controlsHintOpen]);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -246,7 +256,7 @@ export default function VillageArena({
     canMelee: canMeleeNow,
     isWolfForm: isMyWolfForm,
     isGhostForm: isMyGhostForm,
-    isUiBlocked: isUiBlocked || pauseOpen || voteModalOpen || tagMenuOpen,
+    isUiBlocked: isUiBlocked || pauseOpen || voteModalOpen || tagMenuOpen || touchEditorOpen,
     actorNodeMapRef,
     cameraRef,
     stageTransformRef,
@@ -647,6 +657,39 @@ export default function VillageArena({
           );
         })}
 
+        {/* LAYER 3.5: Fixed Bamboo Sleeping Mats ("Chiếu Cói + Gối") during Night */}
+        {isNight &&
+          alivePlayers.map((p) => {
+            const sx = p.sleepOrigin?.x ?? p.x ?? 800;
+            const sy = p.sleepOrigin?.y ?? p.y ?? 650;
+            const isMyMat = p.id === me?.id;
+            return (
+              <div
+                key={`mat-${p.id}`}
+                style={{
+                  left: `${sx}px`,
+                  top: `${sy}px`,
+                  zIndex: Math.max(8, Math.round(sy - 28)),
+                  transform: 'translate(-50%, -62%)',
+                }}
+                className="pointer-events-none absolute w-[114px] h-[60px] flex items-center justify-center select-none"
+              >
+                <img
+                  src={ASSET_PATHS.sleepingMat}
+                  alt="Chiếu ngủ"
+                  draggable={false}
+                  decoding="async"
+                  className="w-full h-full object-contain opacity-95 drop-shadow-[0_4px_6px_rgba(0,0,0,0.55)]"
+                />
+                {isMyMat && canMoveNow && (
+                  <span className="absolute -bottom-3 rounded-full bg-amber-950/90 border border-amber-400/70 px-1.5 py-0.2 text-[9px] font-black text-amber-200 whitespace-nowrap shadow">
+                    🛏️ Chiếu của bạn
+                  </span>
+                )}
+              </div>
+            );
+          })}
+
         {/* LAYER 4: Campfire Center */}
         <CampfireCenter isNight={isNight} />
 
@@ -768,6 +811,7 @@ export default function VillageArena({
           return (
             <div
               key={p.id}
+              data-seat-click="true"
               ref={bindActorDom(p.id, 'root')}
               onClick={(e) => handleSeatClick(e, p)}
               style={{
@@ -961,6 +1005,17 @@ export default function VillageArena({
             >
               <SlidersHorizontal className="w-4 h-4" />
             </button>
+            {showTouchJoystick && (
+              <button
+                type="button"
+                onClick={() => setTouchEditorOpen(true)}
+                className="ggd-btn bg-sky-500/90 px-2 py-1.5 text-xs text-black"
+                title="Chỉnh vị trí & cỡ nút cảm ứng"
+              >
+                <Smartphone className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Nút</span>
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setPauseOpen(true)}
@@ -979,10 +1034,10 @@ export default function VillageArena({
           )}
         </div>
       ) : (
-        /* IN-GAME TOP-CENTER TIMER CAPSULE + VOTE MODAL TRIGGER */
-        <div className="absolute top-2.5 left-1/2 -translate-x-1/2 z-30 flex flex-col items-center gap-1.5 max-w-[92vw]">
-          <div className="flex items-center gap-2">
-            <div className="sc-timer-pill px-4 py-1.5 flex items-center gap-2.5">
+        /* IN-GAME TOP-CENTER TIMER CAPSULE + VOTE MODAL TRIGGER (2nd row on mobile so corner buttons never collide) */
+        <div className="absolute top-13 sm:top-2.5 left-1/2 -translate-x-1/2 z-30 flex flex-col items-center gap-1.5 max-w-[94vw]">
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            <div className="sc-timer-pill px-3 sm:px-4 py-1 sm:py-1.5 flex items-center gap-2">
               <span className="text-lg leading-none">{isNight ? '🌙' : '☀️'}</span>
               {room.phaseEndsAt && (
                 <span
@@ -1016,6 +1071,20 @@ export default function VillageArena({
               >
                 <Vote className="w-4 h-4" />
                 <span>Bảng Vote ({castVoteCount}/{alivePlayers.length})</span>
+              </button>
+            )}
+
+            {showTouchJoystick && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setTouchEditorOpen(true);
+                }}
+                className="ggd-btn bg-sky-500/95 p-2 text-black"
+                title="Chỉnh vị trí & cỡ nút cảm ứng"
+              >
+                <Smartphone className="w-3.5 h-3.5" />
               </button>
             )}
 
@@ -1070,7 +1139,7 @@ export default function VillageArena({
 
       {/* Seer Result Toast */}
       {seerToast && (room.phase === PHASES.NIGHT || room.phase === PHASES.DAWN) && (
-        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-[115] ggd-card px-4 py-2.5 flex items-center gap-3 shadow-2xl border-sky-400 max-w-[90vw]">
+        <div className="absolute top-24 sm:top-16 left-1/2 -translate-x-1/2 z-[115] ggd-card px-4 py-2.5 flex items-center gap-3 shadow-2xl border-sky-400 max-w-[90vw]">
           <span className="text-2xl">🔮</span>
           <div className="text-xs sm:text-sm">
             <div className="text-[10px] font-bold uppercase text-sky-300">Kết quả soi Đêm {seerToast.night}</div>
@@ -1093,7 +1162,7 @@ export default function VillageArena({
 
       {/* Cursed Wolf Assimilation Notice */}
       {showConvertedBanner && (
-        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-[116] ggd-card px-4 py-2.5 border-red-500 bg-red-950/95 flex items-center gap-3 shadow-2xl max-w-[92vw]">
+        <div className="absolute top-24 sm:top-16 left-1/2 -translate-x-1/2 z-[116] ggd-card px-4 py-2.5 border-red-500 bg-red-950/95 flex items-center gap-3 shadow-2xl max-w-[92vw]">
           <span className="text-2xl">🩸</span>
           <div className="text-xs">
             <div className="font-black text-red-300">BẠN ĐÃ BỊ SÓI NGUYỀN ĐỒNG HÓA!</div>
@@ -1111,7 +1180,7 @@ export default function VillageArena({
 
       {/* Dawn Banner */}
       {room.phase === PHASES.DAWN && !showConvertedBanner && (
-        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-[110] ggd-card px-4 py-2.5 text-center max-w-xs sm:max-w-md">
+        <div className="absolute top-24 sm:top-16 left-1/2 -translate-x-1/2 z-[110] ggd-card px-4 py-2.5 text-center max-w-xs sm:max-w-md">
           <div className="text-xs sm:text-sm font-extrabold text-amber-200">
             {room.pendingDeaths.length === 0
               ? '🕊️ Đêm qua bình yên!'
@@ -1129,7 +1198,7 @@ export default function VillageArena({
 
       {/* Defense Plea Banner */}
       {room.phase === PHASES.DAY_DEFENSE && accusedPlayer && (
-        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-[110] rounded-full bg-red-600/95 border-2 border-[#140f0e] px-4 py-1 text-xs font-black text-white whitespace-nowrap animate-pulse shadow-lg">
+        <div className="absolute top-24 sm:top-16 left-1/2 -translate-x-1/2 z-[110] rounded-full bg-red-600/95 border-2 border-[#140f0e] px-4 py-1 text-xs font-black text-white whitespace-nowrap animate-pulse shadow-lg">
           🎙️ {accusedPlayer.name} đang Trăn Trối trên Giá Treo Cổ!
         </div>
       )}
@@ -1142,7 +1211,7 @@ export default function VillageArena({
             e.stopPropagation();
             onToggleSkip();
           }}
-          className={`sc-btn-orange absolute bottom-3 right-3 z-[100] px-4 py-2 text-xs sm:text-sm ${
+          className={`sc-btn-orange absolute bottom-3 right-3 z-[100] px-2.5 py-1.5 sm:px-4 sm:py-2 text-[11px] sm:text-sm ${
             iSkipped ? 'ring-3 ring-emerald-300 brightness-110' : ''
           }`}
         >
@@ -1153,10 +1222,10 @@ export default function VillageArena({
         </button>
       )}
 
-      {/* BOTTOM CENTER ACTION DOCK */}
+      {/* BOTTOM CENTER ACTION DOCK (lifted cleanly above corner Chat/Skip on narrow mobile screens) */}
       <div
         onClick={(e) => e.stopPropagation()}
-        className="absolute bottom-3 left-1/2 -translate-x-1/2 z-[105] flex flex-col items-center gap-1.5 max-w-[60vw] sm:max-w-[66vw]"
+        className="absolute bottom-14 sm:bottom-3 left-1/2 -translate-x-1/2 z-[105] flex flex-col items-center gap-1.5 max-w-[88vw] sm:max-w-[66vw]"
       >
         {tagMenuOpen && activeTarget && (
           <div className="ggd-card p-1.5 flex flex-wrap justify-center gap-1">
@@ -1520,12 +1589,13 @@ export default function VillageArena({
         </div>
       </div>
 
-      {/* MOBILE / MULTI-TOUCH VIRTUAL JOYSTICK + JUMP / PUNCH / KICK CLUSTER */}
-      {canMoveNow && showTouchJoystick && (
+      {/* MOBILE / MULTI-TOUCH VIRTUAL JOYSTICK + CUSTOMIZABLE JUMP / PUNCH / KICK */}
+      {canMoveNow && showTouchJoystick && !touchEditorOpen && (
         <VirtualJoystick
           enabled={true}
           canMelee={canMeleeNow}
           cooldowns={controller.cooldowns}
+          hudConfig={touchHudConfig}
           onMove={controller.setJoystick}
           onJump={controller.triggerJump}
           onMelee={controller.triggerMelee}
@@ -1548,9 +1618,18 @@ export default function VillageArena({
         open={pauseOpen}
         settings={controller.settings}
         onChangeSettings={controller.setSettings}
+        onOpenTouchEditor={() => setTouchEditorOpen(true)}
         onOpenAudioMixer={onOpenAudioMixer}
         onLeaveRoom={onLeaveRoom}
         onClose={() => setPauseOpen(false)}
+      />
+
+      {/* TOUCH CONTROLS DRAG-AND-DROP CUSTOMIZER MODAL */}
+      <TouchHudEditorModal
+        open={touchEditorOpen}
+        config={touchHudConfig}
+        onSave={(cfg) => setTouchHudConfig(saveTouchHudConfig(cfg))}
+        onClose={() => setTouchEditorOpen(false)}
       />
     </div>
   );

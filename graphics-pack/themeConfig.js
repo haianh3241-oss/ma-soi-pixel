@@ -19,6 +19,7 @@ export const ASSET_PATHS = {
   characterSleep: (id) => `/ma-cho/${getVillagerMotion(id).slug}/sleep.png`,
   characterWindup: (id) => `/ma-cho/${getVillagerMotion(id).slug}/windup.png`,
   characterPunchline: (id) => `/ma-cho/${getVillagerMotion(id).slug}/punchline.png`,
+  characterGhost: (id) => `/ma-cho/${getVillagerMotion(id).slug}/ghost.png`,
   characterPart: (id, part) => `/ma-cho/${getVillagerMotion(id).slug}/parts/${part}.png`,
   characterWalkCustom: (id) => `/ma-cho/${getVillagerMotion(id).slug}/walk.webp`,
   characterJumpCustom: (id) => `/ma-cho/${getVillagerMotion(id).slug}/jump.png`,
@@ -35,6 +36,7 @@ export const ASSET_PATHS = {
     return '/death/wolf_claw_marks.png';
   },
   ghostTailAura: '/death/ghost_tail_aura.png',
+  sleepingMat: '/props/sleeping_mat.png',
   campfireLit: '/props/campfire_lit.png',
   campfireOut: '/props/campfire_out.png',
   ghostTombstone: '/props/ghost_tombstone.png',

@@ -29,7 +29,7 @@ const BOT_WILLS = [
 
 export function createBotPlayer(existingPlayers, id) {
   const usedNames = new Set(existingPlayers.map((p) => p.name));
-  const availableNames = BOT_NAMES.filter((n) => !usedNames.has(n));
+  const availableNames = BOT_NAMES.filter((n) => !usedNames.has(`${n} (Bot)`) && !usedNames.has(n));
   const name =
     availableNames.length > 0
       ? availableNames[Math.floor(Math.random() * availableNames.length)]
@@ -98,7 +98,7 @@ export function stepRoomBotsTick(room, io, dt = 0.14) {
       shouldWalk = true;
       speed = room.phase === PHASES.LOBBY ? 210 : 175;
     } else if (isNight) {
-      if (isWolfRole(bot.role)) {
+      if (room.nightStage === 'EARLY' && isWolfRole(bot.role) && !room.nightActions.wolfLocked) {
         shouldWalk = true;
         speed = 265;
       } else if (!room.villagePowersLost) {
@@ -120,10 +120,17 @@ export function stepRoomBotsTick(room, io, dt = 0.14) {
       }
     }
 
+    const prevRx = Math.round(bot.x ?? 800);
+    const prevRy = Math.round(bot.y ?? 650);
+    const prevAnim = bot.anim;
+
     if (!shouldWalk) {
-      if (bot.anim !== (isNight && bot.alive ? 'sleep' : 'idle')) {
-        bot.anim = isNight && bot.alive ? 'sleep' : 'idle';
+      if (isNight && bot.alive && bot.sleepOrigin) {
+        bot.x = bot.sleepOrigin.x;
+        bot.y = bot.sleepOrigin.y;
       }
+      bot.anim = isNight && bot.alive ? 'sleep' : 'idle';
+      bot.botTarget = null;
       continue;
     }
 
@@ -180,14 +187,19 @@ export function stepRoomBotsTick(room, io, dt = 0.14) {
       bot.anim = !bot.alive ? 'ghost' : speed > 240 ? 'run' : 'walk';
     }
 
-    const wolfTransformed = isNight && bot.alive && isWolfRole(bot.role);
+    const nextRx = Math.round(bot.x);
+    const nextRy = Math.round(bot.y);
+    if (nextRx === prevRx && nextRy === prevRy && bot.anim === prevAnim) continue;
+
+    const wolfTransformed =
+      isNight && room.nightStage === 'EARLY' && !room.nightActions?.wolfLocked && bot.alive && isWolfRole(bot.role);
     for (const viewer of room.players) {
       if (viewer.isBot || !viewer.connected || !viewer.socketId) continue;
       if (!canObserverSeeMovement(room, viewer, bot)) continue;
       io.to(viewer.socketId).volatile.emit('player:moved', {
         id: bot.id,
-        x: Math.round(bot.x),
-        y: Math.round(bot.y),
+        x: nextRx,
+        y: nextRy,
         z: bot.alive ? 0 : 16,
         vx: 0,
         vy: 0,
