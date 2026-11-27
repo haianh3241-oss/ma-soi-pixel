@@ -367,6 +367,28 @@ body {
   100% { transform: translate(var(--to-x), var(--to-y)) scale(1.7) rotate(360deg); opacity: 0; }
 }
 
+@keyframes swayHang {
+  0%, 100% { transform: translateX(-50%) rotate(-3deg); }
+  50% { transform: translateX(-50%) rotate(3deg); }
+}
+
+@keyframes dustPuff {
+  0% { transform: translate(-50%, -50%) scale(0.55); opacity: 0.85; }
+  100% { transform: translate(-50%, -140%) scale(1.45); opacity: 0; }
+}
+
+@keyframes meleeArc {
+  0% { transform: translate(-50%, -50%) scale(0.55) rotate(-25deg); opacity: 1; }
+  65% { transform: translate(-50%, -50%) scale(1.22) rotate(18deg); opacity: 0.95; }
+  100% { transform: translate(-50%, -50%) scale(1.4) rotate(30deg); opacity: 0; }
+}
+
+@keyframes nightPulse {
+  0% { transform: translate(-50%, -50%) scale(0.6); opacity: 1; }
+  75% { transform: translate(-50%, -50%) scale(1.25); opacity: 0.9; }
+  100% { transform: translate(-50%, -50%) scale(1.45); opacity: 0; }
+}
+
 .anim-seat-enter { animation: seatEnter 0.42s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
 .anim-arena-shake { animation: arenaShake 0.16s ease-in-out; }
 .anim-soul-idle { animation: soulBounce 2s ease-in-out infinite; transform-origin: bottom center; }
@@ -382,6 +404,10 @@ body {
 .anim-poke-spin { animation: pokeSpin 0.55s cubic-bezier(0.34, 1.56, 0.64, 1); }
 .anim-reaction { animation: floatReaction 2s ease-out forwards; }
 .anim-chat-bubble { animation: chatBubblePop 4.2s ease-out forwards; }
+.anim-sway-hang { animation: swayHang 3.2s ease-in-out infinite; }
+.anim-dust-puff { animation: dustPuff 0.45s ease-out forwards; }
+.anim-melee-arc { animation: meleeArc 0.28s ease-out forwards; }
+.anim-night-pulse { animation: nightPulse 1.4s ease-out forwards; }
 
 .speaking-ring {
   filter: drop-shadow(0 0 8px #4ade80) drop-shadow(0 0 16px rgba(74, 222, 128, 0.95));
@@ -390,3 +416,151 @@ body {
 .wolf-eye-glow {
   filter: drop-shadow(0 0 8px rgba(239, 68, 68, 0.95)) drop-shadow(0 0 16px rgba(239, 68, 68, 0.72));
 }
+
+/* =========================================================
+   7-LAYER CUTOUT PUPPET RIG GPU ANIMATIONS (WALK / RUN / JUMP / MELEE / HANG)
+   ========================================================= */
+
+.rig-body, .rig-torso, .rig-head, .rig-arm-a, .rig-arm-b, .rig-leg-a, .rig-leg-b, .rig-prop, .rig-sheep {
+  will-change: transform;
+}
+
+/* WALK CYCLE (0.50s smooth scissor stride + follow-through head) */
+@keyframes rigWalkBody {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(4deg); }
+  25%, 75% { transform: translate3d(0, -3px, 0) rotate(5deg); }
+  50% { transform: translate3d(0, 0, 0) rotate(3deg); }
+}
+@keyframes rigWalkHead {
+  0%, 100% { transform: translateX(-50%) rotate(-1.5deg); }
+  50% { transform: translateX(-50%) rotate(2.5deg); }
+}
+@keyframes rigWalkLegA {
+  0%, 100% { transform: rotate(28deg) translate3d(0, 0, 0); }
+  50% { transform: rotate(-28deg) translate3d(0, -3px, 0); }
+}
+@keyframes rigWalkLegB {
+  0%, 100% { transform: rotate(-28deg) translate3d(0, -3px, 0); }
+  50% { transform: rotate(28deg) translate3d(0, 0, 0); }
+}
+@keyframes rigWalkArmA {
+  0%, 100% { transform: rotate(-24deg); }
+  50% { transform: rotate(22deg); }
+}
+@keyframes rigWalkArmB {
+  0%, 100% { transform: rotate(22deg); }
+  50% { transform: rotate(-24deg); }
+}
+
+.rig-pose-walk .rig-body { animation: rigWalkBody 0.50s ease-in-out infinite; }
+.rig-pose-walk .rig-head { animation: rigWalkHead 0.50s ease-in-out -0.045s infinite; }
+.rig-pose-walk .rig-leg-a { animation: rigWalkLegA 0.50s ease-in-out infinite; }
+.rig-pose-walk .rig-leg-b { animation: rigWalkLegB 0.50s ease-in-out infinite; }
+.rig-pose-walk .rig-arm-a { animation: rigWalkArmA 0.50s ease-in-out infinite; }
+.rig-pose-walk .rig-arm-b { animation: rigWalkArmB 0.50s ease-in-out infinite; }
+.rig-pose-walk .rig-sheep { animation: rigWalkBody 0.45s ease-in-out -0.08s infinite; }
+
+/* RUN CYCLE (0.33s snappy forward lean + squash/stretch) */
+@keyframes rigRunBody {
+  0%, 100% { transform: translate3d(0, 1px, 0) rotate(12deg) scale(1.03, 0.96); }
+  25%, 75% { transform: translate3d(0, -5px, 0) rotate(11deg) scale(0.97, 1.04); }
+  50% { transform: translate3d(0, 1px, 0) rotate(13deg) scale(1.03, 0.96); }
+}
+@keyframes rigRunHead {
+  0%, 100% { transform: translateX(-50%) rotate(-7deg); }
+  50% { transform: translateX(-50%) rotate(-3deg); }
+}
+@keyframes rigRunLegA {
+  0%, 100% { transform: rotate(48deg) translate3d(0, -2px, 0); }
+  50% { transform: rotate(-44deg) translate3d(0, -4px, 0); }
+}
+@keyframes rigRunLegB {
+  0%, 100% { transform: rotate(-44deg) translate3d(0, -4px, 0); }
+  50% { transform: rotate(48deg) translate3d(0, -2px, 0); }
+}
+@keyframes rigRunArmA {
+  0%, 100% { transform: rotate(-42deg); }
+  50% { transform: rotate(38deg); }
+}
+@keyframes rigRunArmB {
+  0%, 100% { transform: rotate(38deg); }
+  50% { transform: rotate(-42deg); }
+}
+
+.rig-pose-run .rig-body { animation: rigRunBody 0.33s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite; }
+.rig-pose-run .rig-head { animation: rigRunHead 0.33s ease-in-out -0.04s infinite; }
+.rig-pose-run .rig-leg-a { animation: rigRunLegA 0.33s ease-in-out infinite; }
+.rig-pose-run .rig-leg-b { animation: rigRunLegB 0.33s ease-in-out infinite; }
+.rig-pose-run .rig-arm-a { animation: rigRunArmA 0.33s ease-in-out infinite; }
+.rig-pose-run .rig-arm-b { animation: rigRunArmB 0.33s ease-in-out infinite; }
+.rig-pose-run .rig-sheep { animation: rigRunBody 0.30s ease-in-out -0.07s infinite; }
+
+/* JUMP AIRBORNE */
+@keyframes rigJumpBody {
+  0% { transform: scale(1.06, 0.92); }
+  35% { transform: scale(0.94, 1.07) rotate(-4deg); }
+  100% { transform: scale(0.97, 1.03) rotate(3deg); }
+}
+.rig-pose-jump .rig-body { animation: rigJumpBody 0.38s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+.rig-pose-jump .rig-arm-a { transform: rotate(-52deg); }
+.rig-pose-jump .rig-arm-b { transform: rotate(-36deg); }
+.rig-pose-jump .rig-leg-a { transform: rotate(32deg); }
+.rig-pose-jump .rig-leg-b { transform: rotate(-28deg); }
+
+/* PUNCH (J) */
+@keyframes rigPunchBody {
+  0% { transform: rotate(-8deg) scale(0.96, 1.03); }
+  40% { transform: rotate(16deg) translate3d(5px, 0, 0) scale(1.05, 0.96); }
+  100% { transform: rotate(6deg); }
+}
+@keyframes rigPunchArm {
+  0% { transform: rotate(38deg); }
+  35% { transform: rotate(-92deg) scale(1.1); }
+  100% { transform: rotate(-55deg); }
+}
+.rig-pose-punch .rig-body { animation: rigPunchBody 0.24s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+.rig-pose-punch .rig-arm-a { animation: rigPunchArm 0.24s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+.rig-pose-punch .rig-arm-b { transform: rotate(36deg); }
+.rig-pose-punch .rig-leg-a { transform: rotate(-24deg); }
+.rig-pose-punch .rig-leg-b { transform: rotate(22deg); }
+
+/* KICK (K) */
+@keyframes rigKickBody {
+  0% { transform: rotate(6deg); }
+  35% { transform: rotate(-16deg) translate3d(4px, -3px, 0); }
+  100% { transform: rotate(-8deg); }
+}
+@keyframes rigKickLeg {
+  0% { transform: rotate(25deg); }
+  35% { transform: rotate(-84deg) scale(1.08); }
+  100% { transform: rotate(-45deg); }
+}
+.rig-pose-kick .rig-body { animation: rigKickBody 0.32s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+.rig-pose-kick .rig-leg-a { animation: rigKickLeg 0.32s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+.rig-pose-kick .rig-leg-b { transform: rotate(18deg); }
+.rig-pose-kick .rig-arm-a { transform: rotate(42deg); }
+.rig-pose-kick .rig-arm-b { transform: rotate(-35deg); }
+
+/* HITSTUN RECOIL */
+.rig-pose-hit .rig-body { transform: rotate(-18deg); }
+.rig-pose-hit .rig-arm-a { transform: rotate(-125deg); }
+.rig-pose-hit .rig-arm-b { transform: rotate(-110deg); }
+.rig-pose-hit .rig-leg-a { transform: rotate(24deg); }
+.rig-pose-hit .rig-leg-b { transform: rotate(-22deg); }
+
+/* HANGING (GALLOWS) & CORPSE */
+@keyframes rigHangLimp {
+  0%, 100% { transform: rotate(-4deg); }
+  50% { transform: rotate(4deg); }
+}
+.rig-pose-hanging .rig-head { transform: translateX(-50%) rotate(16deg); }
+.rig-pose-hanging .rig-arm-a { animation: rigHangLimp 2.8s ease-in-out infinite; }
+.rig-pose-hanging .rig-arm-b { animation: rigHangLimp 2.8s ease-in-out -0.4s infinite; }
+.rig-pose-hanging .rig-leg-a { animation: rigHangLimp 3.1s ease-in-out -0.2s infinite; }
+.rig-pose-hanging .rig-leg-b { animation: rigHangLimp 3.1s ease-in-out -0.6s infinite; }
+
+.rig-pose-corpse .rig-head { transform: translateX(-50%) rotate(10deg); }
+.rig-pose-corpse .rig-arm-a { transform: rotate(-68deg); }
+.rig-pose-corpse .rig-arm-b { transform: rotate(52deg); }
+.rig-pose-corpse .rig-leg-a { transform: rotate(-18deg); }
+.rig-pose-corpse .rig-leg-b { transform: rotate(22deg); }

@@ -11,6 +11,9 @@ const WAV_SFX = {
   curse: '/sfx/curse_spell.wav',
   potion: '/sfx/witch_potion.wav',
   death: '/sfx/death.wav',
+  jump: '/sfx/jump.wav',
+  punch: '/sfx/punch.wav',
+  kick: '/sfx/kick.wav',
 };
 
 class GameAudioEngine {

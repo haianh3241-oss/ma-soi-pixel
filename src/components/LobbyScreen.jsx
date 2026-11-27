@@ -241,6 +241,7 @@ export default function LobbyScreen({
   onAddBot,
   onRemovePlayer,
   onStartGame,
+  onOpenCourtyard,
 }) {
   const [copied, setCopied] = useState(false);
   const [willDraft, setWillDraft] = useState(me?.will || '');
@@ -362,6 +363,15 @@ export default function LobbyScreen({
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            {onOpenCourtyard && (
+              <button
+                type="button"
+                onClick={onOpenCourtyard}
+                className="px-btn bg-amber-400 text-black px-3 py-2 text-xs"
+              >
+                <span>🏃 Sân Chờ Tự Do</span>
+              </button>
+            )}
             <button
               type="button"
               onClick={voiceChat?.toggleMic}

@@ -252,3 +252,67 @@ test('IMA-ADPCM codec preserves 16kHz voice signal cleanly across encode/decode'
   }
   assert.ok(maxErr < 0.08, `Expected ADPCM error < 0.08, got ${maxErr}`);
 });
+
+test('Nomination vote requires more votes than combined Skip + Abstain (fixes 2/6 blank-vote defense bug)', () => {
+  const host = createPlayer({ id: 'p1', name: 'A1', avatarId: 'blacksmith' });
+  const room = createRoom(host, 'VOT006');
+  for (let i = 2; i <= 6; i++) {
+    room.players.push(createPlayer({ id: `p${i}`, name: `A${i}`, avatarId: 'farmer' }));
+  }
+  startGame(room);
+  room.phase = PHASES.DAY_DISCUSS;
+  room.dayCount = 1;
+
+  // 2 votes for p2, 4 blank votes -> 2 <= 4 -> must return null (straight to Night!)
+  room.dayVotes = { p1: 'p2', p3: 'p2' };
+  assert.equal(tallyDayNomination(room), null);
+
+  // 3 votes for p2, 3 blank votes -> 3 <= 3 -> still not majority -> null
+  room.dayVotes = { p1: 'p2', p3: 'p2', p4: 'p2' };
+  assert.equal(tallyDayNomination(room), null);
+
+  // 4 votes for p2, 2 blank votes -> 4 > 2 -> accused!
+  room.dayVotes = { p1: 'p2', p3: 'p2', p4: 'p2', p5: 'p2' };
+  assert.equal(tallyDayNomination(room), 'p2');
+});
+
+test('Night stealth hides Wolf movement from sleeping Villagers while Dead Ghosts see all night movers, and Dawn restores sleepOrigin', () => {
+  const room = setup5PlayerRoom();
+  room.players[0].role = 'guard';
+  room.players[1].role = 'villager';
+  room.players[2].role = 'villager';
+  room.players[2].alive = false; // Ghost!
+  room.players[3].role = 'cursed_wolf';
+  room.players[4].role = 'seer';
+
+  room.players[3].x = 400;
+  room.players[3].y = 400;
+  enterNight(room);
+  assert.deepEqual(room.players[3].sleepOrigin, { x: 400, y: 400 });
+
+  // Wolf walks across the courtyard toward p2's sleep spot
+  room.players[3].x = 950;
+  room.players[3].y = 680;
+  room.players[3].anim = 'walk';
+
+  // Living villager p2 must ONLY see wolf at sleepOrigin (400, 400) & sleep pose, NEVER live position or wolf form!
+  const villagerView = sanitizeRoomForPlayer(room, 'p2');
+  const wolfSeenByVillager = villagerView.players.find((p) => p.id === 'p4');
+  assert.equal(wolfSeenByVillager.x, 400);
+  assert.equal(wolfSeenByVillager.y, 400);
+  assert.equal(wolfSeenByVillager.anim, 'sleep');
+  assert.equal(wolfSeenByVillager.wolfTransformed, false);
+
+  // Dead Ghost p3 sees live wolf running & transformed!
+  const ghostView = sanitizeRoomForPlayer(room, 'p3');
+  const wolfSeenByGhost = ghostView.players.find((p) => p.id === 'p4');
+  assert.equal(wolfSeenByGhost.x, 950);
+  assert.equal(wolfSeenByGhost.y, 680);
+  assert.equal(wolfSeenByGhost.wolfTransformed, true);
+
+  // Dawn restores wolf back to sleepOrigin (400, 400)
+  enterLateNight(room);
+  resolveNightToDawn(room);
+  assert.equal(room.players[3].x, 400);
+  assert.equal(room.players[3].y, 400);
+});

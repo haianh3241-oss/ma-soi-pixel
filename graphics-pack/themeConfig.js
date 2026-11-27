@@ -17,6 +17,24 @@ export const ASSET_PATHS = {
   characterIdle: (id) => `/ma-cho/${getVillagerMotion(id).slug}/idle.webp`,
   characterEmote: (id) => `/ma-cho/${getVillagerMotion(id).slug}/emote.webp`,
   characterSleep: (id) => `/ma-cho/${getVillagerMotion(id).slug}/sleep.png`,
+  characterWindup: (id) => `/ma-cho/${getVillagerMotion(id).slug}/windup.png`,
+  characterPunchline: (id) => `/ma-cho/${getVillagerMotion(id).slug}/punchline.png`,
+  characterPart: (id, part) => `/ma-cho/${getVillagerMotion(id).slug}/parts/${part}.png`,
+  characterWalkCustom: (id) => `/ma-cho/${getVillagerMotion(id).slug}/walk.webp`,
+  characterJumpCustom: (id) => `/ma-cho/${getVillagerMotion(id).slug}/jump.png`,
+  characterAttackCustom: (id) => `/ma-cho/${getVillagerMotion(id).slug}/attack.webp`,
+  wolfBeast: (role, state = 'idle') => {
+    const dir = role === 'cursed_wolf' ? 'cursed-wolf' : 'werewolf';
+    return `/wolves/${dir}/${state}.png`;
+  },
+  gallowsBack: '/props/gallows/gallows_back.png',
+  gallowsNoose: '/props/gallows/gallows_noose.png',
+  deathDecal: (cause) => {
+    if (cause === 'poison') return '/death/poison_puddle.png';
+    if (cause === 'hunter') return '/death/hunter_bullet_smoke.png';
+    return '/death/wolf_claw_marks.png';
+  },
+  ghostTailAura: '/death/ghost_tail_aura.png',
   campfireLit: '/props/campfire_lit.png',
   campfireOut: '/props/campfire_out.png',
   ghostTombstone: '/props/ghost_tombstone.png',

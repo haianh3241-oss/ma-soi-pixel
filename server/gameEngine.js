@@ -1,4 +1,10 @@
 import { PHASES, ROLES, VILLAGERS, getBalancedRoles } from '../shared/constants.js';
+import {
+  DEFAULT_MOVEMENT_CONFIG,
+  GALLOWS_POS,
+  getRingSpawnPosition,
+  getTrialAudiencePosition,
+} from '../src/engine/movementConfig.js';
 
 function shuffle(arr) {
   const a = [...arr];
@@ -86,7 +92,20 @@ export function createEmptyNightActions() {
   };
 }
 
-export function createPlayer({ id, socketId, name, avatarId, will = '', isBot = false, isSpectator = false }) {
+export function assignLobbyRingPositions(players) {
+  const active = players.filter((p) => !p.isSpectator);
+  active.forEach((p, idx) => {
+    const pos = getRingSpawnPosition(idx, active.length, 0.92);
+    p.x = pos.x;
+    p.y = pos.y;
+    p.z = 0;
+    p.facing = pos.x <= 800 ? 1 : -1;
+    p.anim = 'idle';
+    p.sleepOrigin = { x: pos.x, y: pos.y };
+  });
+}
+
+export function createPlayer({ id, socketId, name, avatarId, will = '', isBot = false, isSpectator = false, x = 800, y = 720 }) {
   return {
     id,
     socketId,
@@ -104,7 +123,14 @@ export function createPlayer({ id, socketId, name, avatarId, will = '', isBot = 
     witchHealLeft: false,
     witchPoisonLeft: false,
     seerHistory: [], // [{ night, targetId, targetName, isWolf }]
-    deathInfo: null, // { day, phase, cause }
+    deathInfo: null, // { day, phase, cause, x, y, hangSlot }
+    x,
+    y,
+    z: 0,
+    facing: x <= 800 ? 1 : -1,
+    anim: 'idle',
+    sleepOrigin: { x, y },
+    lastMeleeAt: 0,
   };
 }
 
@@ -131,7 +157,8 @@ export function getVoteWeight(room, player) {
 }
 
 export function startGame(room) {
-  const active = room.players.map((p) => {
+  const active = room.players.map((p, idx) => {
+    const pos = getRingSpawnPosition(idx, room.players.length, 0.95);
     p.isSpectator = false;
     p.alive = true;
     p.role = null;
@@ -143,6 +170,13 @@ export function startGame(room) {
     p.seerHistory = [];
     p.deathInfo = null;
     p.convertedOnDay = null;
+    p.x = pos.x;
+    p.y = pos.y;
+    p.z = 0;
+    p.facing = pos.x <= 800 ? 1 : -1;
+    p.anim = 'idle';
+    p.sleepOrigin = { x: pos.x, y: pos.y };
+    p.lastMeleeAt = 0;
     return p;
   });
 
@@ -232,10 +266,19 @@ export function enterNight(room) {
   room.nightActions = createEmptyNightActions();
   room.dayVotes = {};
   room.skipVotes = [];
-  room.skipVotes = [];
   room.accusedId = null;
   room.verdictVotes = {};
   room.extensionUsedToday = false;
+
+  // Save sleepOrigin for every living villager so dawn restores them cleanly
+  for (const p of room.players) {
+    if (!p.isSpectator && p.alive) {
+      p.sleepOrigin = { x: Math.round(p.x ?? 800), y: Math.round(p.y ?? 700) };
+      p.z = 0;
+      p.anim = isWolfRole(p.role) ? 'idle' : 'sleep';
+    }
+  }
+
   room.publicLogs.push({
     id: Date.now() + Math.random(),
     day: room.dayCount,
@@ -400,6 +443,19 @@ export function resolveNightToDawn(room) {
   // Apply deaths + lover chain + elder penalty
   const finalDeaths = applyDeathsWithChains(room, deaths, 'NIGHT');
 
+  // Restore all surviving villagers back to their sleepOrigin and turn wolves back into villagers!
+  for (const p of room.players) {
+    if (!p.isSpectator && p.alive) {
+      if (p.sleepOrigin && Number.isFinite(p.sleepOrigin.x) && Number.isFinite(p.sleepOrigin.y)) {
+        p.x = p.sleepOrigin.x;
+        p.y = p.sleepOrigin.y;
+      }
+      p.z = 0;
+      p.anim = 'idle';
+      p.facing = p.x <= 800 ? 1 : -1;
+    }
+  }
+
   room.phase = PHASES.DAWN;
   room.nightStage = null;
   room.pendingDeaths = finalDeaths;
@@ -427,14 +483,43 @@ export function resolveNightToDawn(room) {
 export function applyDeathsWithChains(room, initialDeaths, phaseLabel) {
   const applied = [];
   const queue = [...initialDeaths];
+  let lynchedCount = room.players.filter((pl) => !pl.alive && pl.deathInfo?.cause === 'lynch').length;
 
   while (queue.length > 0) {
     const { playerId, cause } = queue.shift();
     const p = room.players.find((pl) => pl.id === playerId);
     if (!p || !p.alive) continue;
 
+    let deathX = Math.round(p.sleepOrigin?.x ?? p.x ?? 800);
+    let deathY = Math.round(p.sleepOrigin?.y ?? p.y ?? 650);
+    let hangSlot = null;
+
+    if (cause === 'lynch') {
+      hangSlot = lynchedCount;
+      lynchedCount += 1;
+      const offsetX = GALLOWS_POS.slotOffsetsX[hangSlot % GALLOWS_POS.slotOffsetsX.length] || 0;
+      deathX = GALLOWS_POS.x + offsetX;
+      deathY = GALLOWS_POS.standY;
+    } else if (phaseLabel !== 'NIGHT') {
+      deathX = Math.round(p.x ?? deathX);
+      deathY = Math.round(p.y ?? deathY);
+    }
+
     p.alive = false;
-    p.deathInfo = { day: room.dayCount, phase: phaseLabel, cause };
+    p.deathInfo = {
+      day: room.dayCount,
+      phase: phaseLabel,
+      cause,
+      x: deathX,
+      y: deathY,
+      hangSlot,
+    };
+    // Ghost floats out slightly beside their corpse or gallows
+    p.x = Math.min(1440, deathX + 34);
+    p.y = Math.min(820, deathY + 26);
+    p.z = 16;
+    p.anim = 'ghost';
+
     applied.push({ playerId: p.id, name: p.name, cause, will: room.settings.enableWills ? p.will : '' });
 
     // Elder penalty if killed by village (lynch, poison, hunter)
@@ -521,17 +606,25 @@ export function checkWinCondition(room) {
 export function tallyDayNomination(room) {
   const alive = getAlivePlayers(room);
   const tally = {}; // targetId | 'skip' -> weight
+  let abstainWeight = 0;
 
   for (const p of alive) {
     const choice = room.dayVotes[p.id];
-    if (!choice) continue;
     const w = getVoteWeight(room, p);
+    if (!choice) {
+      abstainWeight += w;
+      continue;
+    }
     tally[choice] = (tally[choice] || 0) + w;
   }
+
+  const skipWeight = tally.skip || 0;
+  const noHangWeight = skipWeight + abstainWeight;
 
   let maxWeight = 0;
   let topChoices = [];
   for (const [target, w] of Object.entries(tally)) {
+    if (target === 'skip') continue;
     if (w > maxWeight) {
       maxWeight = w;
       topChoices = [target];
@@ -548,12 +641,15 @@ export function tallyDayNomination(room) {
     }
   }
 
-  if (topChoices.length !== 1 || topChoices[0] === 'skip' || maxWeight === 0) {
+  // Require strictly more votes for top candidate than combined (Skip + Abstain/Blank) and no tie!
+  if (topChoices.length !== 1 || maxWeight === 0 || maxWeight <= noHangWeight) {
     room.voteHistory.push({
       day: room.dayCount,
       type: 'NOMINATION',
       votes: recordVotes,
-      result: 'Không có ai bị đưa lên giàn treo (Hòa phiếu hoặc Bỏ qua).',
+      abstainWeight,
+      skipWeight,
+      result: `Không đủ phiếu lên Giá Treo Cổ (${maxWeight} phiếu cao nhất vs ${noHangWeight} Bỏ qua/Trống).`,
     });
     return null;
   }
@@ -646,7 +742,7 @@ export function tallyVerdict(room) {
     id: Date.now() + Math.random(),
     day: room.dayCount,
     type: 'info',
-    text: `🛡️ Sau 15s trăn trối, ${accused?.name} được THA BỔNG (${hangWeight} Treo vs ${spareWeight} Tha). Màn đêm buông xuống...`,
+    text: `🛡️ Sau ${room.settings.defenseSeconds}s trăn trối, ${accused?.name} được THA BỔNG (${hangWeight} Treo vs ${spareWeight} Tha). Màn đêm buông xuống...`,
   });
   return { executed: false, applied: [], jesterWon: false };
 }
@@ -735,13 +831,100 @@ export function computeEndgameAwards(room) {
   return awards;
 }
 
+export function canPlayerMoveNow(room, player) {
+  if (!room || !player) return false;
+  if (!player.alive || player.isSpectator) return true; // Ghosts can always fly freely!
+  if ([PHASES.LOBBY, PHASES.ROLE_REVEAL, PHASES.DAY_DISCUSS, PHASES.GAME_OVER].includes(room.phase)) {
+    return true;
+  }
+  if (room.phase === PHASES.NIGHT) {
+    if (isWolfRole(player.role)) return true;
+    if (room.villagePowersLost) return false;
+    if (room.nightStage === 'EARLY') {
+      if (player.role === 'cupid' && room.dayCount === 1 && room.nightActions.cupidTargets.length < 2) return true;
+      if (player.role === 'guard' && !room.nightActions.guardSubmitted) return true;
+    }
+    if (room.nightStage === 'LATE') {
+      if (player.role === 'seer' && !room.nightActions.seerSubmitted) return true;
+      if (
+        player.role === 'witch' &&
+        !room.nightActions.witchSubmitted &&
+        (player.witchHealLeft || player.witchPoisonLeft)
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }
+  return false; // Locked in formation during DAWN, HUNTER_SHOT, DAY_DEFENSE, DAY_VERDICT
+}
+
+export function canObserverSeeMovement(room, viewer, mover) {
+  if (!room || !viewer || !mover) return false;
+  if (room.phase === PHASES.GAME_OVER) return true;
+  const viewerIsDead = !viewer.alive || viewer.isSpectator;
+  if (!mover.alive || mover.isSpectator) {
+    // Only Ghosts & Spectators see Ghosts flying around
+    return viewerIsDead || viewer.id === mover.id;
+  }
+  if (room.phase === PHASES.NIGHT) {
+    if (viewerIsDead) return true; // Option B: Ghosts see ALL wolves & active night roles!
+    if (viewer.id === mover.id) return true;
+    if (viewer.alive && isWolfRole(viewer.role) && isWolfRole(mover.role)) return true;
+    return false;
+  }
+  return true;
+}
+
+export function arrangeTrialFormation(room) {
+  const active = getActivePlayers(room);
+  const audience = active.filter((p) => p.alive && p.id !== room.accusedId);
+  audience.forEach((p, idx) => {
+    const pos = getTrialAudiencePosition(idx, audience.length);
+    p.x = pos.x;
+    p.y = pos.y;
+    p.z = 0;
+    p.anim = 'idle';
+    p.facing = p.x <= GALLOWS_POS.x ? 1 : -1;
+  });
+  const accused = room.players.find((p) => p.id === room.accusedId);
+  if (accused && accused.alive) {
+    accused.x = GALLOWS_POS.x;
+    accused.y = GALLOWS_POS.standY;
+    accused.z = 0;
+    accused.anim = 'emote';
+    accused.facing = 1;
+  }
+}
+
 export function sanitizeRoomForPlayer(room, viewerId) {
   const viewer = room.players.find((p) => p.id === viewerId);
   const isGameOver = room.phase === PHASES.GAME_OVER;
-  const viewerIsWolf = viewer && !viewer.isSpectator && isWolfRole(viewer.role);
+  const isNight = room.phase === PHASES.NIGHT;
+  const viewerIsDead = Boolean(viewer && (!viewer.alive || viewer.isSpectator));
+  const viewerIsWolf = Boolean(viewer && !viewer.isSpectator && isWolfRole(viewer.role));
+  const canSeeNightOmniscient = isGameOver || viewerIsDead;
 
   const players = room.players.map((p) => {
-    const showRole = isGameOver || p.id === viewerId || (viewerIsWolf && isWolfRole(p.role));
+    const showRole = isGameOver || viewerIsDead || p.id === viewerId || (viewerIsWolf && isWolfRole(p.role));
+    const canSeeLivePos =
+      !isNight
+        ? p.alive || viewerIsDead || isGameOver
+        : canSeeNightOmniscient ||
+          p.id === viewerId ||
+          (viewerIsWolf && viewer.alive && p.alive && isWolfRole(p.role));
+
+    const visX = canSeeLivePos ? (p.x ?? 800) : (p.sleepOrigin?.x ?? p.x ?? 800);
+    const visY = canSeeLivePos ? (p.y ?? 700) : (p.sleepOrigin?.y ?? p.y ?? 700);
+    const visZ = canSeeLivePos ? (p.z ?? 0) : 0;
+    const visAnim = canSeeLivePos ? (p.anim || 'idle') : p.alive ? 'sleep' : 'ghost';
+    const wolfTransformed = Boolean(
+      isNight &&
+        p.alive &&
+        isWolfRole(p.role) &&
+        (canSeeNightOmniscient || p.id === viewerId || (viewerIsWolf && viewer.alive))
+    );
+
     return {
       id: p.id,
       name: p.name,
@@ -755,6 +938,15 @@ export function sanitizeRoomForPlayer(room, viewerId) {
       deathInfo: p.deathInfo,
       role: showRole ? p.role : null,
       originalRole: isGameOver ? p.originalRole : null,
+      x: Math.round(visX),
+      y: Math.round(visY),
+      z: Math.round(visZ),
+      facing: p.facing || 1,
+      anim: visAnim,
+      sleepOrigin: p.sleepOrigin || { x: Math.round(visX), y: Math.round(visY) },
+      wolfTransformed,
+      nightActorVisible: Boolean(isNight && p.alive && canSeeLivePos && canPlayerMoveNow(room, p)),
+      ghostVisible: Boolean(!p.alive && (viewerIsDead || isGameOver)),
       isLover: isGameOver || (viewer && room.lovers.includes(viewerId) && room.lovers.includes(p.id))
         ? room.lovers.includes(p.id)
         : false,
@@ -798,6 +990,8 @@ export function sanitizeRoomForPlayer(room, viewerId) {
         wolfVotes: viewerIsWolf && room.phase === PHASES.NIGHT ? room.nightActions.wolfVotes : {},
         curseActive: viewerIsWolf && room.phase === PHASES.NIGHT ? Boolean(room.nightActions.curseActive) : false,
         wolfLocked: viewerIsWolf && room.phase === PHASES.NIGHT ? Boolean(room.nightActions.wolfLocked) : false,
+        canMove: canPlayerMoveNow(room, viewer),
+        gallowsPos: GALLOWS_POS,
         witchVictimId:
           viewer.role === 'witch' &&
           viewer.alive &&

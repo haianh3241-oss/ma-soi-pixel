@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { sfx } from '../audio/sfx.js';
 import { ASSET_PATHS } from '../../graphics-pack/themeConfig.js';
 import { VILLAGER_MOTION, getVillagerMotion } from '../data/villagerMotion.js';
+import VillagerPuppetRig from './VillagerPuppetRig.jsx';
 
 export const POKE_EFFECTS = VILLAGER_MOTION;
 
@@ -18,12 +19,14 @@ export default function PixelVillager({
   size = 82,
   isNight = false,
   eyeState = 'awake', // 'awake' | 'sleep' | 'wolf'
+  animState = 'idle', // 'idle' | 'walk' | 'run' | 'jump' | 'punch' | 'kick' | 'hit' | 'sleep' | 'ghost'
+  wolfFormRole = null, // null | 'werewolf' | 'cursed_wolf'
   isSpeaking = false,
-  animate = true,
   still = false,
   emoteKey = null,
   isAccused = false,
   enablePoke = false,
+  hideShadow = false,
   staggerIndex = 0,
   onPokeExtra = null,
   onHeavyImpact = null,
@@ -32,6 +35,7 @@ export default function PixelVillager({
   const [bursts, setBursts] = useState([]);
   const [reactingPlayId, setReactingPlayId] = useState(null);
   const [sleepFallback, setSleepFallback] = useState(false);
+  const [poseFallback, setPoseFallback] = useState(false);
 
   const playCounterRef = useRef(0);
   const lastEmoteKeyRef = useRef(emoteKey);
@@ -44,8 +48,9 @@ export default function PixelVillager({
 
   useEffect(() => {
     setSleepFallback(false);
+    setPoseFallback(false);
     setReactingPlayId(null);
-  }, [avatarId]);
+  }, [avatarId, animState, wolfFormRole]);
 
   useEffect(() => () => clearMotionTimers(), [clearMotionTimers]);
 
@@ -97,7 +102,6 @@ export default function PixelVillager({
     [alive, motion, onHeavyImpact]
   );
 
-  // External trigger (e.g., hit by throwable projectile or stepping up for Day Defense)
   useEffect(() => {
     if (emoteKey == null || still) return;
     if (lastEmoteKeyRef.current === emoteKey) return;
@@ -113,24 +117,47 @@ export default function PixelVillager({
 
   const activeBurst = bursts[bursts.length - 1];
   const isReacting = alive && !still && reactingPlayId !== null;
-  const isSleeping = alive && eyeState === 'sleep' && !isReacting;
-  const isWolfEyes = alive && eyeState === 'wolf';
+  const isGhostRender = !alive && animState === 'ghost';
+  const isSleeping = alive && (animState === 'sleep' || eyeState === 'sleep') && !isReacting;
+  const isAttacking = alive && (animState === 'punch' || animState === 'kick');
+  const isHitstun = alive && animState === 'hit';
+  const isWolfEyes = alive && (eyeState === 'wolf' || Boolean(wolfFormRole));
+
+  const puppetPose =
+    !still && !isReacting && !wolfFormRole
+      ? isGhostRender
+        ? 'walk'
+        : alive && !isSleeping && ['walk', 'run', 'jump', 'punch', 'kick', 'hit'].includes(animState)
+          ? animState
+          : null
+      : null;
 
   let spriteSrc;
-  if (!alive) {
+  if (!alive && !isGhostRender) {
     spriteSrc = ASSET_PATHS.ghostTombstone;
   } else if (still) {
     spriteSrc = ASSET_PATHS.characterIcon(avatarId);
+  } else if (wolfFormRole && alive) {
+    const wolfPose =
+      isAttacking || isReacting
+        ? 'bite'
+        : animState === 'walk' || animState === 'run' || animState === 'jump'
+          ? 'walk'
+          : 'idle';
+    spriteSrc = ASSET_PATHS.wolfBeast(wolfFormRole, wolfPose);
   } else if (isReacting) {
     spriteSrc = `${ASSET_PATHS.characterEmote(avatarId)}?play=${reactingPlayId}`;
+  } else if (isAttacking && !poseFallback) {
+    spriteSrc = ASSET_PATHS.characterPunchline(avatarId);
+  } else if (isHitstun && !poseFallback) {
+    spriteSrc = ASSET_PATHS.characterWindup(avatarId);
   } else if (isSleeping && !sleepFallback) {
     spriteSrc = ASSET_PATHS.characterSleep(avatarId);
   } else {
     spriteSrc = ASSET_PATHS.characterIdle(avatarId);
   }
 
-  // IMPORTANT: Never stack CSS anim-soul-idle over animated idle.webp / emote.webp (prevents double bounce!)
-  const motionClass = !alive
+  const motionClass = !alive && !isGhostRender
     ? 'anim-ghost'
     : activeBurst
       ? activeBurst.animClass || motion.animClass || 'anim-poke-tickle'
@@ -153,16 +180,29 @@ export default function PixelVillager({
       className={`relative flex items-end justify-center ${motionClass} ${enablePoke ? 'cursor-pointer' : ''}`}
       style={{ width: size, height: size, ...motionStyle }}
     >
-      {/* Ground oval shadow anchored to terracotta brick floor */}
-      <div
-        className={`pointer-events-none absolute bottom-0 left-1/2 -translate-x-1/2 rounded-full blur-[1px] transition-all ${
-          isWolfEyes ? 'bg-red-700/65 shadow-[0_0_12px_rgba(239,68,68,0.85)]' : 'bg-black/45'
-        }`}
-        style={{ width: size * 0.66, height: Math.max(6, size * 0.14) }}
-      />
+      {/* Ground oval shadow (skipped when VillageArena drives Z-separated shadow directly) */}
+      {!hideShadow && (
+        <div
+          className={`pointer-events-none absolute bottom-0 left-1/2 -translate-x-1/2 rounded-full blur-[1px] transition-all ${
+            isWolfEyes ? 'bg-red-700/65 shadow-[0_0_12px_rgba(239,68,68,0.85)]' : 'bg-black/45'
+          }`}
+          style={{ width: size * 0.66, height: Math.max(6, size * 0.14) }}
+        />
+      )}
 
-      {/* Tombstone mini portrait badge so friends recognize who fell */}
-      {!alive && (
+      {/* Ghost Spirit Mist Tail below translucent character */}
+      {isGhostRender && (
+        <img
+          src={ASSET_PATHS.ghostTailAura}
+          alt=""
+          draggable={false}
+          className="pointer-events-none absolute -bottom-5 left-1/2 -translate-x-1/2 z-0 opacity-80 object-contain"
+          style={{ width: Math.round(size * 0.92), height: Math.round(size * 0.92) }}
+        />
+      )}
+
+      {/* Tombstone mini portrait badge (when showing static tombstone) */}
+      {!alive && !isGhostRender && (
         <img
           src={ASSET_PATHS.characterIcon(avatarId)}
           alt=""
@@ -173,7 +213,7 @@ export default function PixelVillager({
       )}
 
       {/* Nighttime warm lantern glow for Anh Gác Đêm */}
-      {alive && isNight && !isSleeping && motion.ambientLantern && (
+      {alive && isNight && !isSleeping && !wolfFormRole && motion.ambientLantern && (
         <div
           className="pointer-events-none absolute -inset-2 rounded-full opacity-55"
           style={{
@@ -189,8 +229,16 @@ export default function PixelVillager({
         </div>
       )}
 
-      {/* Glowing red wolf-eye flare visible strictly to fellow wolves at night */}
-      {isWolfEyes && (
+      {/* Stun stars when knocked by Kick */}
+      {isHitstun && (
+        <div className="pointer-events-none absolute -top-4 left-1/2 -translate-x-1/2 z-30 flex gap-1 text-sm animate-bounce select-none">
+          <span>💫</span>
+          <span>⭐</span>
+        </div>
+      )}
+
+      {/* Glowing red wolf-eye flare when fellow wolf in villager disguise */}
+      {isWolfEyes && !wolfFormRole && (
         <div className="pointer-events-none absolute top-[16%] left-1/2 -translate-x-1/2 z-20 flex gap-2.5">
           <span className="w-2.5 h-2 rounded-full bg-red-500 shadow-[0_0_10px_#ff2d2d,0_0_16px_#ef4444]" />
           <span className="w-2.5 h-2 rounded-full bg-red-500 shadow-[0_0_10px_#ff2d2d,0_0_16px_#ef4444]" />
@@ -198,7 +246,7 @@ export default function PixelVillager({
       )}
 
       {/* Ambient smoke for Smoker & Waterpipe */}
-      {alive && !isSleeping && motion.ambientSmoke && (
+      {alive && !isSleeping && !wolfFormRole && motion.ambientSmoke && (
         <div className="pointer-events-none absolute -top-2 right-1 flex gap-1 z-20">
           <span className="anim-smoke inline-block w-2.5 h-2.5 rounded-full bg-slate-100/75" />
           {avatarId === 'waterpipe' && (
@@ -248,23 +296,50 @@ export default function PixelVillager({
             className="w-full h-full object-contain select-none"
           />
         </picture>
+      ) : puppetPose ? (
+        <div
+          className="relative z-10 w-full h-full flex items-end justify-center"
+          style={{
+            opacity: isGhostRender ? 0.68 : 1,
+            filter: isGhostRender
+              ? 'drop-shadow(0 0 10px rgba(56,189,248,0.8))'
+              : isHitstun
+                ? 'brightness(1.7)'
+                : undefined,
+          }}
+        >
+          <VillagerPuppetRig
+            avatarId={avatarId}
+            size={size}
+            pose={puppetPose}
+            emoteHead={isGhostRender || isAttacking || isHitstun}
+          />
+        </div>
       ) : (
         <picture className="relative z-10 w-full h-full flex items-end justify-center">
-          {alive && <source media="(prefers-reduced-motion: reduce)" srcSet={ASSET_PATHS.characterIcon(avatarId)} />}
+          {alive && !wolfFormRole && !isAttacking && !isHitstun && (
+            <source media="(prefers-reduced-motion: reduce)" srcSet={ASSET_PATHS.characterIcon(avatarId)} />
+          )}
           <img
             src={spriteSrc}
             alt={motion.name}
             draggable={false}
             onError={() => {
               if (isSleeping && !sleepFallback) setSleepFallback(true);
+              else if ((isAttacking || isHitstun) && !poseFallback) setPoseFallback(true);
             }}
             className={`w-full h-full object-contain select-none ${isWolfEyes ? 'wolf-eye-glow' : ''}`}
             style={{
-              filter: isAccused
-                ? 'drop-shadow(0 0 10px rgba(239,68,68,0.95)) drop-shadow(0 3px 0 rgba(17,13,12,0.55))'
-                : isNight && isSleeping
-                  ? 'brightness(0.76) saturate(0.88) drop-shadow(0 3px 0 rgba(17,13,12,0.55))'
-                  : 'drop-shadow(0 3px 0 rgba(17,13,12,0.5))',
+              opacity: isGhostRender ? 0.68 : 1,
+              filter: isGhostRender
+                ? 'drop-shadow(0 0 10px rgba(56,189,248,0.85)) brightness(1.08)'
+                : isHitstun
+                  ? 'brightness(1.7)'
+                  : isAccused
+                    ? 'drop-shadow(0 0 10px rgba(239,68,68,0.95))'
+                    : isNight && isSleeping
+                      ? 'brightness(0.76) saturate(0.88)'
+                      : undefined,
             }}
           />
         </picture>

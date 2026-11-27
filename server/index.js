@@ -7,6 +7,10 @@ import { Server } from 'socket.io';
 import { INTERACTIONS, PHASES, ROAST_STICKERS, ROLES, getBalancedRoles } from '../shared/constants.js';
 import {
   applyDeathsWithChains,
+  arrangeTrialFormation,
+  assignLobbyRingPositions,
+  canObserverSeeMovement,
+  canPlayerMoveNow,
   checkEarlyNightComplete,
   checkLateNightComplete,
   checkWinCondition,
@@ -25,7 +29,9 @@ import {
   tallyDayNomination,
   tallyVerdict,
 } from './gameEngine.js';
-import { createBotPlayer, scheduleBotActions } from './botEngine.js';
+import { createBotPlayer, scheduleBotActions, stepRoomBotsTick } from './botEngine.js';
+import { DEFAULT_MOVEMENT_CONFIG } from '../src/engine/movementConfig.js';
+import { findMeleeTargetsInCone, resolveWorldCollisions } from '../src/engine/physics2d.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -91,6 +97,26 @@ function broadcastSfx(room, sound, targetPlayerIds = null) {
     if (player.isBot || !player.socketId) continue;
     if (filterSet && !filterSet.has(player.id)) continue;
     io.to(player.socketId).emit('room:sfx', { sound });
+  }
+}
+
+function broadcastNightEffect(room, actor, targetIds, effectType) {
+  if (!room || room.phase !== PHASES.NIGHT || !actor) return;
+  const actorIsWolf = isWolfRole(actor.role);
+  for (const viewer of room.players) {
+    if (viewer.isBot || !viewer.connected || !viewer.socketId) continue;
+    const viewerIsDead = !viewer.alive || viewer.isSpectator;
+    const allowed =
+      viewerIsDead ||
+      viewer.id === actor.id ||
+      (actorIsWolf && viewer.alive && isWolfRole(viewer.role));
+    if (!allowed) continue;
+    io.to(viewer.socketId).emit('night:effect', {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      actorId: actor.id,
+      targetIds,
+      effectType,
+    });
   }
 }
 
@@ -222,6 +248,7 @@ function finishDayDiscuss(room) {
   room.accusedId = accusedId;
   room.phase = PHASES.DAY_DEFENSE;
   room.skipVotes = [];
+  arrangeTrialFormation(room);
   const accused = room.players.find((p) => p.id === accusedId);
   room.publicLogs.push({
     id: Date.now() + Math.random(),
@@ -282,6 +309,7 @@ const botHandlers = {
     const p = room.players.find((x) => x.id === playerId && x.alive && x.role === 'cupid');
     if (!p || targets.length !== 2 || targets[0] === targets[1]) return;
     room.nightActions.cupidTargets = targets;
+    broadcastNightEffect(room, p, targets, 'cupid');
     if (checkEarlyNightComplete(room)) triggerNightLate(room);
     else broadcastRoom(room);
   },
@@ -291,6 +319,7 @@ const botHandlers = {
     if (!p || targetId === room.lastGuardedId) return;
     room.nightActions.guardTarget = targetId;
     room.nightActions.guardSubmitted = true;
+    broadcastNightEffect(room, p, [targetId], 'guard');
     if (checkEarlyNightComplete(room)) triggerNightLate(room);
     else broadcastRoom(room);
   },
@@ -302,6 +331,9 @@ const botHandlers = {
       const t = room.players.find((x) => x.id === targetId && x.alive && !isWolfRole(x.role));
       if (!t) return;
       room.nightActions.wolfVotes[playerId] = targetId;
+      if (lock) {
+        broadcastNightEffect(room, p, [targetId], curseActive ? 'wolf_curse' : 'wolf_bite');
+      }
     }
     if (p.role === 'cursed_wolf' && !room.cursedUsed) {
       room.nightActions.curseActive = Boolean(curseActive);
@@ -326,6 +358,7 @@ const botHandlers = {
       targetName: target.name,
       isWolf: isWolfRole(target.role),
     });
+    broadcastNightEffect(room, p, [target.id], 'seer');
     if (checkLateNightComplete(room)) triggerDawn(room);
     else broadcastRoom(room);
   },
@@ -335,10 +368,14 @@ const botHandlers = {
     if (!p || room.nightActions.witchSubmitted) return;
     if (heal && p.witchHealLeft && room.nightActions.effectiveWolfVictim) {
       room.nightActions.witchHeal = true;
+      broadcastNightEffect(room, p, [room.nightActions.effectiveWolfVictim], 'witch_heal');
     }
     if (poisonTargetId && p.witchPoisonLeft) {
       const t = room.players.find((x) => x.id === poisonTargetId && x.alive);
-      if (t) room.nightActions.witchPoisonTarget = t.id;
+      if (t) {
+        room.nightActions.witchPoisonTarget = t.id;
+        broadcastNightEffect(room, p, [t.id], 'witch_poison');
+      }
     }
     room.nightActions.witchSubmitted = true;
     if (checkLateNightComplete(room)) triggerDawn(room);
@@ -458,6 +495,7 @@ io.on('connection', (socket) => {
     const playerId = clientId || `p_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
     const player = createPlayer({ id: playerId, socketId: socket.id, name, avatarId, will });
     const room = createRoom(player, code);
+    assignLobbyRingPositions(room.players);
     rooms.set(code, room);
     socketIndex.set(socket.id, { roomCode: code, playerId });
     broadcastRoom(room);
@@ -497,6 +535,7 @@ io.on('connection', (socket) => {
     room.players.push(player);
     if (room.phase === PHASES.LOBBY) {
       room.settings.roleCounts = getBalancedRoles(room.players.length);
+      assignLobbyRingPositions(room.players);
     }
     socketIndex.set(socket.id, { roomCode: cleanCode, playerId });
     broadcastRoom(room);
@@ -537,6 +576,7 @@ io.on('connection', (socket) => {
     const bot = createBotPlayer(ctx.room.players, `bot_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`);
     ctx.room.players.push(bot);
     ctx.room.settings.roleCounts = getBalancedRoles(ctx.room.players.length);
+    assignLobbyRingPositions(ctx.room.players);
     broadcastRoom(ctx.room);
   });
 
@@ -546,6 +586,7 @@ io.on('connection', (socket) => {
     if (targetId === ctx.player.id) return;
     ctx.room.players = ctx.room.players.filter((p) => p.id !== targetId);
     ctx.room.settings.roleCounts = getBalancedRoles(ctx.room.players.length);
+    assignLobbyRingPositions(ctx.room.players);
     broadcastRoom(ctx.room);
   });
 
@@ -576,6 +617,7 @@ io.on('connection', (socket) => {
       p.deathInfo = null;
       p.convertedOnDay = null;
     }
+    assignLobbyRingPositions(ctx.room.players);
     ctx.room.settings.roleCounts = getBalancedRoles(ctx.room.players.length);
     broadcastRoom(ctx.room);
   });
@@ -753,6 +795,100 @@ io.on('connection', (socket) => {
     botHandlers.sendInteraction(ctx.room, ctx.player.id, targetId, itemId);
   });
 
+  socket.on('player:move', ({ x, y, z, vx, vy, facing, anim }) => {
+    const ctx = getCtx();
+    if (!ctx) return;
+    const { room, player } = ctx;
+    if (!canPlayerMoveNow(room, player)) return;
+
+    const resolved = resolveWorldCollisions(Number(x), Number(y), DEFAULT_MOVEMENT_CONFIG.colliderRadius, {
+      ignoreObstacles: !player.alive || player.isSpectator,
+    });
+    player.x = resolved.x;
+    player.y = resolved.y;
+    player.z = Math.max(0, Math.min(260, Number(z) || 0));
+    player.facing = facing < 0 ? -1 : 1;
+    player.anim = typeof anim === 'string' ? anim.slice(0, 16) : 'idle';
+
+    const wolfTransformed = room.phase === PHASES.NIGHT && player.alive && isWolfRole(player.role);
+    for (const viewer of room.players) {
+      if (viewer.isBot || !viewer.connected || !viewer.socketId || viewer.id === player.id) continue;
+      if (!canObserverSeeMovement(room, viewer, player)) continue;
+      io.to(viewer.socketId).volatile.emit('player:moved', {
+        id: player.id,
+        x: player.x,
+        y: player.y,
+        z: player.z,
+        vx: Number(vx) || 0,
+        vy: Number(vy) || 0,
+        facing: player.facing,
+        anim: player.anim,
+        wolfTransformed,
+      });
+    }
+  });
+
+  socket.on('player:melee', ({ type, dirX, dirY }) => {
+    const ctx = getCtx();
+    if (!ctx) return;
+    const { room, player } = ctx;
+    const isKick = type === 'kick';
+    const allowedPhase =
+      [PHASES.LOBBY, PHASES.ROLE_REVEAL, PHASES.DAY_DISCUSS, PHASES.GAME_OVER].includes(room.phase) ||
+      !player.alive;
+    if (!allowedPhase) return;
+
+    const now = Date.now();
+    const minCd = isKick
+      ? DEFAULT_MOVEMENT_CONFIG.kickCooldownMs * 0.7
+      : DEFAULT_MOVEMENT_CONFIG.punchCooldownMs * 0.7;
+    if (now - (player.lastMeleeAt || 0) < minCd) return;
+    player.lastMeleeAt = now;
+
+    const attackerIsGhost = !player.alive || player.isSpectator;
+    const sameRealmTargets = room.players.filter(
+      (p) => p.id !== player.id && !p.isSpectator && (attackerIsGhost ? !p.alive : p.alive)
+    );
+    const range = isKick ? DEFAULT_MOVEMENT_CONFIG.kickRange : DEFAULT_MOVEMENT_CONFIG.punchRange;
+    const force = isKick ? DEFAULT_MOVEMENT_CONFIG.kickForce : DEFAULT_MOVEMENT_CONFIG.punchForce;
+    const vz = isKick ? DEFAULT_MOVEMENT_CONFIG.kickJumpVz : 0;
+
+    const hitsRaw = findMeleeTargetsInCone({
+      attacker: player,
+      actors: sameRealmTargets,
+      dirX: Number(dirX) || (player.facing >= 0 ? 1 : -1),
+      dirY: Number(dirY) || 0,
+      range,
+    }).slice(0, isKick ? 3 : 2);
+
+    const hits = hitsRaw.map((h) => {
+      const kx = Math.round(h.nx * force);
+      const ky = Math.round(h.ny * force);
+      if (h.target.isBot) {
+        const pushed = resolveWorldCollisions(h.target.x + kx * 0.14, h.target.y + ky * 0.14);
+        h.target.x = pushed.x;
+        h.target.y = pushed.y;
+      }
+      return { targetId: h.target.id, kx, ky, vz };
+    });
+
+    const payload = {
+      id: `${now}-${Math.random().toString(36).slice(2, 6)}`,
+      attackerId: player.id,
+      type: isKick ? 'kick' : 'punch',
+      dirX: Number(dirX) || (player.facing >= 0 ? 1 : -1),
+      dirY: Number(dirY) || 0,
+      hits,
+    };
+
+    for (const viewer of room.players) {
+      if (viewer.isBot || !viewer.connected || !viewer.socketId) continue;
+      if (viewer.id === player.id || canObserverSeeMovement(room, viewer, player)) {
+        io.to(viewer.socketId).emit('player:meleeHit', payload);
+      }
+    }
+  });
+
   socket.on('game:addRoastSticker', ({ targetId, stickerId }) => {
     const ctx = getCtx();
     if (!ctx || ctx.room.phase !== PHASES.GAME_OVER) return;
@@ -829,6 +965,14 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 3001;
+setInterval(() => {
+  for (const room of rooms.values()) {
+    if (room.players.some((p) => p.isBot)) {
+      stepRoomBotsTick(room, io, 0.14);
+    }
+  }
+}, 140);
+
 server.listen(PORT, () => {
   console.log(`Ma Cho server listening on http://localhost:${PORT}`);
 });

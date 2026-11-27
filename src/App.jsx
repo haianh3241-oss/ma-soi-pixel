@@ -68,6 +68,7 @@ export default function App() {
   const [leaveConfirm, setLeaveConfirm] = useState(false);
   const [bagOpen, setBagOpen] = useState(false);
   const [selectedThrow, setSelectedThrow] = useState(null);
+  const [lobbyViewMode, setLobbyViewMode] = useState('courtyard'); // 'courtyard' | 'settings'
   const [artStudioMode, setArtStudioMode] = useState(() => {
     const params = new URLSearchParams(window.location.search);
     return params.get('preview') === 'art';
@@ -234,7 +235,9 @@ export default function App() {
     }
 
     if (prevPhaseRef.current !== room.phase) {
-      if (room.phase === PHASES.ROLE_REVEAL) {
+      if (room.phase === PHASES.LOBBY) {
+        setLobbyViewMode('courtyard');
+      } else if (room.phase === PHASES.ROLE_REVEAL) {
         setSuspectTags({});
         setRoleOpen(true);
         sfx.play('pop');
@@ -254,6 +257,7 @@ export default function App() {
     socket?.emit('room:create', { clientId: myId, name, avatarId, will }, (res) => {
       if (res?.ok && res.playerId) {
         setMyId(res.playerId);
+        setLobbyViewMode('courtyard');
         saveSession({ code: res.code, clientId: res.playerId, name, avatarId, will });
         window.history.replaceState({}, '', `?room=${res.code}`);
       }
@@ -265,6 +269,7 @@ export default function App() {
     socket?.emit('room:join', { code, clientId: myId, name, avatarId, will }, (res) => {
       if (res?.ok && res.playerId) {
         setMyId(res.playerId);
+        setLobbyViewMode('courtyard');
         saveSession({ code: res.code, clientId: res.playerId, name, avatarId, will });
         window.history.replaceState({}, '', `?room=${res.code}`);
       }
@@ -328,10 +333,12 @@ export default function App() {
 
   const myRoleDef = room.selfPrivate?.role ? ROLES[room.selfPrivate.role] : null;
   const inGame = room.phase !== PHASES.LOBBY && room.phase !== PHASES.GAME_OVER;
+  const isLobbyCourtyard = room.phase === PHASES.LOBBY && lobbyViewMode === 'courtyard';
+  const showArenaShell = inGame || isLobbyCourtyard;
 
   return (
-    <div className={inGame ? 'relative w-full h-dvh overflow-hidden' : 'min-h-dvh w-full flex flex-col'}>
-      {room.phase === PHASES.LOBBY ? (
+    <div className={showArenaShell ? 'relative w-full h-dvh overflow-hidden' : 'min-h-dvh w-full flex flex-col'}>
+      {room.phase === PHASES.LOBBY && lobbyViewMode === 'settings' ? (
         <div className="flex flex-col min-h-dvh">
           <header className="sticky top-0 z-30 px-3 h-12 bg-[#1c1614] border-b-2 border-[#110d0c] flex items-center justify-between shrink-0">
             <div className="flex items-center gap-2">
@@ -363,6 +370,7 @@ export default function App() {
               onAddBot={() => socket?.emit('room:addBot')}
               onRemovePlayer={(targetId) => socket?.emit('room:removePlayer', { targetId })}
               onStartGame={(cb) => socket?.emit('room:startGame', {}, cb)}
+              onOpenCourtyard={() => setLobbyViewMode('courtyard')}
             />
           </div>
           {/* Floating Right-Side Mic Button in Lobby (matches in-game layout & mobile reminder) */}
@@ -395,11 +403,12 @@ export default function App() {
           onLeaveRoom={executeLeaveRoom}
         />
       ) : (
-        /* 2.5D TOP-DOWN VILLAGE ARENA */
+        /* 2.5D TOP-DOWN VILLAGE ARENA (COURTYARD LOBBY + FULL MATCH) */
         <div className="relative w-full h-full overflow-hidden">
           <VillageArena
             room={room}
             me={me}
+            socket={socket}
             nowMs={nowMs}
             speakingPeers={voiceChat.speakingPeers}
             activeReactions={activeReactions}
@@ -407,6 +416,15 @@ export default function App() {
             chatBubbles={chatBubbles}
             suspectTags={suspectTags}
             selectedThrow={selectedThrow}
+            isLobbyCourtyard={isLobbyCourtyard}
+            isUiBlocked={chatOpen || roleOpen || deckOpen || mixerOpen || leaveConfirm}
+            copied={copied}
+            onCopyInvite={copyInvite}
+            onOpenLobbySettings={() => setLobbyViewMode('settings')}
+            onAddBot={() => socket?.emit('room:addBot')}
+            onStartGame={(cb) => socket?.emit('room:startGame', {}, cb)}
+            onOpenAudioMixer={() => setMixerOpen(true)}
+            onLeaveRoom={() => setLeaveConfirm(true)}
             onClearThrow={() => setSelectedThrow(null)}
             onSetSuspectTag={handleSetSuspectTag}
             onNightCupid={(targets) => socket?.emit('game:nightCupid', { targets })}
@@ -424,33 +442,35 @@ export default function App() {
             onInteract={(targetId, itemId) => socket?.emit('room:interact', { targetId, itemId })}
           />
 
-          {/* TOP-LEFT: Glossy Blue Role Card + Role Deck Overview */}
-          <div className="absolute top-2.5 left-2.5 z-40 flex items-center gap-1.5">
-            <button
-              type="button"
-              onClick={() => setRoleOpen((o) => !o)}
-              className="sc-btn-blue px-2.5 py-2 text-xs"
-              title="Xem vai trò của bạn"
-            >
-              {myRoleDef ? (
-                <RoleIcon role={myRoleDef} className="w-5 h-5 shrink-0" emojiClass="text-base leading-none" />
-              ) : (
-                <span className="text-base leading-none">👁️</span>
-              )}
-              <span className="hidden sm:inline">{myRoleDef?.name || 'Khán giả'}</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setDeckOpen(true)}
-              className="ggd-btn bg-[#1f274a]/95 px-2.5 py-2 text-xs text-sky-300"
-              title="Xem ván này có những role gì"
-            >
-              <ClipboardList className="w-4 h-4" />
-              <span className="hidden sm:inline">Role ván này</span>
-            </button>
-          </div>
+          {/* TOP-LEFT: Role Card + Role Deck Overview (In-game only) */}
+          {inGame && (
+            <div className="absolute top-2.5 left-2.5 z-40 flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setRoleOpen((o) => !o)}
+                className="sc-btn-blue px-2.5 py-2 text-xs"
+                title="Xem vai trò của bạn"
+              >
+                {myRoleDef ? (
+                  <RoleIcon role={myRoleDef} className="w-5 h-5 shrink-0" emojiClass="text-base leading-none" />
+                ) : (
+                  <span className="text-base leading-none">👁️</span>
+                )}
+                <span className="hidden sm:inline">{myRoleDef?.name || 'Khán giả'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setDeckOpen(true)}
+                className="ggd-btn bg-[#1f274a]/95 px-2.5 py-2 text-xs text-sky-300"
+                title="Xem ván này có những role gì"
+              >
+                <ClipboardList className="w-4 h-4" />
+                <span className="hidden sm:inline">Role ván này</span>
+              </button>
+            </div>
+          )}
 
-          {roleOpen && (
+          {roleOpen && inGame && (
             <div className="absolute top-12 left-2 z-[260] w-72 sm:w-80">
               <div className="relative">
                 <button
@@ -469,37 +489,39 @@ export default function App() {
             </div>
           )}
 
-          {/* TOP-RIGHT: Invite, Audio Mixer, Leave Room */}
-          <div className="absolute top-2 right-2 z-40 flex items-center gap-1.5">
-            <button
-              type="button"
-              onClick={copyInvite}
-              className="ggd-btn bg-[#1f2542]/95 px-2.5 py-1.5 text-xs text-sky-300"
-              title={`Mã phòng #${room.code}`}
-            >
-              {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-              <span className="hidden sm:inline">#{room.code}</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setMixerOpen(true)}
-              className="ggd-btn bg-[#1f2542]/95 p-1.5 text-amber-300"
-              title="Cài đặt âm thanh (Nhạc nền / SFX / Voice)"
-            >
-              <SlidersHorizontal className="w-4 h-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => setLeaveConfirm(true)}
-              className="ggd-btn bg-rose-600/95 p-1.5 text-white"
-              title="Thoát phòng"
-            >
-              <LogOut className="w-4 h-4" />
-            </button>
-          </div>
+          {/* TOP-RIGHT: Invite, Audio Mixer, Leave Room (In-game; Lobby Courtyard uses its own top bar) */}
+          {inGame && (
+            <div className="absolute top-2 right-2 z-40 flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={copyInvite}
+                className="ggd-btn bg-[#1f2542]/95 px-2.5 py-1.5 text-xs text-sky-300"
+                title={`Mã phòng #${room.code}`}
+              >
+                {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                <span className="hidden sm:inline">#{room.code}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setMixerOpen(true)}
+                className="ggd-btn bg-[#1f2542]/95 p-1.5 text-amber-300"
+                title="Cài đặt âm thanh (Nhạc nền / SFX / Voice)"
+              >
+                <SlidersHorizontal className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setLeaveConfirm(true)}
+                className="ggd-btn bg-rose-600/95 p-1.5 text-white"
+                title="Thoát phòng"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            </div>
+          )}
 
-          {/* RIGHT SIDE: Supercell Double-Ring Mic + Throw Bag */}
-          <div className="absolute right-2.5 top-1/2 -translate-y-1/2 z-40 flex flex-col items-end gap-2.5">
+          {/* RIGHT SIDE: Supercell Double-Ring Mic + Throw Bag (shifted slightly up to leave room for Mobile Action Cluster) */}
+          <div className="absolute right-2.5 top-[38%] -translate-y-1/2 z-40 flex flex-col items-end gap-2.5">
             <button
               type="button"
               onClick={voiceChat.toggleMic}
@@ -558,8 +580,8 @@ export default function App() {
             </div>
           )}
 
-          {/* BOTTOM-LEFT: Glossy Blue Chat Button & Slide-Up Chat Drawer */}
-          {!chatOpen && inGame && (
+          {/* BOTTOM-LEFT: Glossy Blue Chat Button & Slide-Up Chat Drawer (In-Game + Lobby Courtyard) */}
+          {!chatOpen && showArenaShell && (
             <div className="absolute bottom-3 left-3 z-40">
               <button
                 type="button"
@@ -581,7 +603,7 @@ export default function App() {
             </div>
           )}
 
-          {chatOpen && inGame && (
+          {chatOpen && showArenaShell && (
             <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-[280] w-[95vw] max-w-xl h-[42vh] min-h-[220px] max-h-[340px]">
               <ChatVoicePanel
                 room={room}

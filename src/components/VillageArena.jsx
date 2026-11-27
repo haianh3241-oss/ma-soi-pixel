@@ -1,8 +1,22 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Tag, X } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Bot, Check, Copy, Pause, Play, Settings, SlidersHorizontal, Tag, Vote, X } from 'lucide-react';
 import { INTERACTIONS, PHASES, SUSPECT_TAGS } from '../../shared/constants.js';
-import { ARENA_LAYOUT, ASSET_PATHS } from '../../graphics-pack/themeConfig.js';
+import { ASSET_PATHS } from '../../graphics-pack/themeConfig.js';
 import PixelVillager from './PixelVillager.jsx';
+import VillagerPuppetRig from './VillagerPuppetRig.jsx';
+import GallowsStage from './GallowsStage.jsx';
+import VirtualJoystick from './VirtualJoystick.jsx';
+import PauseMenuModal from './PauseMenuModal.jsx';
+import AmongUsVoteModal from './AmongUsVoteModal.jsx';
+import {
+  ARENA_COLLIDERS,
+  ARENA_WALKABLE_BOUNDS,
+  CAMPFIRE_POS,
+  DEFAULT_MOVEMENT_CONFIG,
+  WORLD_HEIGHT,
+  WORLD_WIDTH,
+} from '../engine/movementConfig.js';
+import { usePlayerController } from '../hooks/usePlayerController.js';
 import { preloadRoomVillagers } from '../data/villagerMotion.js';
 import { formatCountdown, isWolfRole } from '../utils/helpers.js';
 import { sfx } from '../audio/sfx.js';
@@ -18,10 +32,18 @@ function CampfireCenter({ isNight }) {
   const [outMissing, setOutMissing] = useState(false);
 
   return (
-    <div className="relative flex flex-col items-center justify-center select-none pointer-events-none">
+    <div
+      style={{
+        left: `${CAMPFIRE_POS.x}px`,
+        top: `${CAMPFIRE_POS.y}px`,
+        zIndex: CAMPFIRE_POS.y,
+        transform: 'translate(-50%, -62%)',
+      }}
+      className="pointer-events-none absolute flex flex-col items-center justify-center select-none"
+    >
       {isNight && (
         <div
-          className="absolute w-52 h-36 sm:w-72 sm:h-48 rounded-full"
+          className="absolute w-72 h-48 rounded-full"
           style={{
             background: 'radial-gradient(ellipse, rgba(251,146,60,0.45) 0%, rgba(251,146,60,0) 72%)',
           }}
@@ -30,8 +52,8 @@ function CampfireCenter({ isNight }) {
 
       {!isNight && (
         <div className="absolute -top-6 flex gap-2 z-20">
-          <span className="anim-smoke inline-block w-3 h-3 rounded-full bg-slate-200/75" />
-          <span className="anim-smoke inline-block w-3.5 h-3.5 rounded-full bg-white/65" style={{ animationDelay: '0.6s' }} />
+          <span className="anim-smoke inline-block w-3.5 h-3.5 rounded-full bg-slate-200/75" />
+          <span className="anim-smoke inline-block w-4 h-4 rounded-full bg-white/65" style={{ animationDelay: '0.6s' }} />
         </div>
       )}
 
@@ -40,13 +62,13 @@ function CampfireCenter({ isNight }) {
           src={ASSET_PATHS.campfireLit}
           alt="Đống lửa trại"
           draggable={false}
-          className={`w-16 h-16 sm:w-24 sm:h-24 object-contain ${isNight ? 'anim-fire' : ''}`}
+          className={`w-28 h-28 object-contain ${isNight ? 'anim-fire' : ''}`}
           style={
             isNight
               ? undefined
               : {
-                  filter: 'brightness(0.42) saturate(0.15) contrast(1.15)',
-                  opacity: 0.85,
+                  filter: 'brightness(0.45) saturate(0.18) contrast(1.15)',
+                  opacity: 0.88,
                 }
           }
         />
@@ -56,23 +78,43 @@ function CampfireCenter({ isNight }) {
           alt="Đống lửa tắt"
           draggable={false}
           onError={() => setOutMissing(true)}
-          className="w-16 h-16 sm:w-24 sm:h-24 object-contain"
+          className="w-28 h-28 object-contain"
         />
       )}
     </div>
   );
 }
 
+const NIGHT_EFFECT_META = {
+  wolf_bite: { icon: '🐺💢', color: 'border-red-500 bg-red-600/35', label: 'Vồ Cắn!' },
+  wolf_curse: { icon: '🩸🌙', color: 'border-purple-500 bg-purple-600/40', label: 'Nguyền Hóa Sói!' },
+  guard: { icon: '🛡️', color: 'border-sky-400 bg-sky-500/30', label: 'Che Chở!' },
+  cupid: { icon: '💘', color: 'border-pink-400 bg-pink-500/30', label: 'Ghép Đôi!' },
+  seer: { icon: '🔮', color: 'border-indigo-400 bg-indigo-500/30', label: 'Soi Bài!' },
+  witch_heal: { icon: '💚🧪', color: 'border-emerald-400 bg-emerald-500/35', label: 'Bình Cứu!' },
+  witch_poison: { icon: '☠️🧪', color: 'border-purple-500 bg-purple-700/40', label: 'Bình Độc!' },
+};
+
 export default function VillageArena({
   room,
   me,
+  socket,
   nowMs,
-  speakingPeers,
-  activeReactions,
-  projectiles,
-  chatBubbles,
-  suspectTags,
-  selectedThrow,
+  speakingPeers = {},
+  activeReactions = [],
+  projectiles = [],
+  chatBubbles = {},
+  suspectTags = {},
+  selectedThrow = null,
+  isLobbyCourtyard = false,
+  isUiBlocked = false,
+  copied = false,
+  onCopyInvite,
+  onOpenLobbySettings,
+  onAddBot,
+  onStartGame,
+  onOpenAudioMixer,
+  onLeaveRoom,
   onClearThrow,
   onSetSuspectTag,
   onNightCupid,
@@ -88,7 +130,20 @@ export default function VillageArena({
   onInteract,
 }) {
   const containerRef = useRef(null);
-  const [size, setSize] = useState({ w: 800, h: 600 });
+  const cameraRef = useRef(null);
+  const stageTransformRef = useRef({
+    scale: 0.75,
+    camX: 0,
+    camY: 0,
+    viewportW: 1000,
+    viewportH: 700,
+    rectLeft: 0,
+    rectTop: 0,
+  });
+  const actorNodeMapRef = useRef(new Map());
+
+  const [size, setSize] = useState({ w: 1000, h: 700 });
+  const [isTouchDevice, setIsTouchDevice] = useState(false);
   const [selectedTargetId, setSelectedTargetId] = useState(null);
   const [tagMenuOpen, setTagMenuOpen] = useState(false);
   const [cupidPick, setCupidPick] = useState([]);
@@ -97,22 +152,51 @@ export default function VillageArena({
   const [arenaShake, setArenaShake] = useState(false);
   const [seerToast, setSeerToast] = useState(null);
   const [dismissedConvertDay, setDismissedConvertDay] = useState(null);
+  const [pauseOpen, setPauseOpen] = useState(false);
+  const [voteModalOpen, setVoteModalOpen] = useState(false);
+  const [lobbyError, setLobbyError] = useState('');
+  const [controlsHintOpen, setControlsHintOpen] = useState(true);
+
+  const [actorAnims, setActorAnims] = useState({}); // id -> { anim, wolf }
+  const [dustPuffs, setDustPuffs] = useState([]);
+  const [slashVfx, setSlashVfx] = useState([]);
+  const [nightEffects, setNightEffects] = useState([]);
 
   const seenProjectilesRef = useRef(new Set());
   const prevDefenseKeyRef = useRef(null);
   const prevSeerCountRef = useRef(0);
 
   useEffect(() => {
+    const touch = typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0);
+    setIsTouchDevice(Boolean(touch));
+  }, []);
+
+  useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
     const update = () => {
       const rect = el.getBoundingClientRect();
-      if (rect.width > 0 && rect.height > 0) setSize({ w: rect.width, h: rect.height });
+      if (rect.width > 0 && rect.height > 0) {
+        setSize({ w: rect.width, h: rect.height });
+        const scale =
+          rect.width < 768
+            ? Math.max(0.64, (rect.height / WORLD_HEIGHT) * 0.85)
+            : Math.min(rect.width / WORLD_WIDTH, rect.height / WORLD_HEIGHT);
+        stageTransformRef.current.scale = scale;
+        stageTransformRef.current.viewportW = rect.width;
+        stageTransformRef.current.viewportH = rect.height;
+        stageTransformRef.current.rectLeft = rect.left;
+        stageTransformRef.current.rectTop = rect.top;
+      }
     };
     update();
     const ro = new ResizeObserver(update);
     ro.observe(el);
-    return () => ro.disconnect();
+    window.addEventListener('resize', update);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', update);
+    };
   }, []);
 
   const priv = room.selfPrivate;
@@ -121,20 +205,84 @@ export default function VillageArena({
   const secondsLeft = formatCountdown(room.phaseEndsAt, nowMs);
   const activePlayers = useMemo(() => room.players.filter((p) => !p.isSpectator), [room.players]);
   const alivePlayers = useMemo(() => activePlayers.filter((p) => p.alive), [activePlayers]);
+  const isHost = room.hostId === me?.id;
+
+  const canMoveNow = priv?.canMove !== undefined ? Boolean(priv.canMove) : isLobbyCourtyard || room.phase === PHASES.DAY_DISCUSS || !me?.alive;
+  const canMeleeNow =
+    !me?.alive ||
+    isLobbyCourtyard ||
+    [PHASES.LOBBY, PHASES.ROLE_REVEAL, PHASES.DAY_DISCUSS, PHASES.GAME_OVER].includes(room.phase);
+  const isMyWolfForm = Boolean(isNight && me?.alive && isWolfRole(myRole));
+  const isMyGhostForm = Boolean(me && !me.alive);
+
+  const handleActorAnimChange = useCallback((id, anim, wolfTransformed) => {
+    setActorAnims((prev) => {
+      const cur = prev[id];
+      if (cur && cur.anim === anim && cur.wolf === wolfTransformed) return prev;
+      return { ...prev, [id]: { anim, wolf: wolfTransformed } };
+    });
+  }, []);
+
+  const handleDustBurst = useCallback(({ x, y, count = 3 }) => {
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    setDustPuffs((prev) => [...prev.slice(-18), { id, x, y, count }]);
+    setTimeout(() => {
+      setDustPuffs((prev) => prev.filter((d) => d.id !== id));
+    }, 460);
+  }, []);
+
+  const handleSlashVfx = useCallback((fx) => {
+    setSlashVfx((prev) => [...prev.slice(-12), fx]);
+    setTimeout(() => {
+      setSlashVfx((prev) => prev.filter((s) => s.id !== fx.id));
+    }, 300);
+  }, []);
+
+  const controller = usePlayerController({
+    socket,
+    room,
+    me,
+    canMove: canMoveNow,
+    canMelee: canMeleeNow,
+    isWolfForm: isMyWolfForm,
+    isGhostForm: isMyGhostForm,
+    isUiBlocked: isUiBlocked || pauseOpen || voteModalOpen || tagMenuOpen,
+    actorNodeMapRef,
+    cameraRef,
+    stageTransformRef,
+    onActorAnimChange: handleActorAnimChange,
+    onDustBurst: handleDustBurst,
+    onSlashVfx: handleSlashVfx,
+    onTogglePause: useCallback(() => setPauseOpen((o) => !o), []),
+  });
+
+  // Subscribe to authorized night visual effects (for caster + Ghosts + Wolves)
+  useEffect(() => {
+    if (!socket) return;
+    const onNightEff = (eff) => {
+      setNightEffects((prev) => [...prev.slice(-10), eff]);
+      setTimeout(() => {
+        setNightEffects((prev) => prev.filter((e) => e.id !== eff.id));
+      }, 1500);
+    };
+    socket.on('night:effect', onNightEff);
+    return () => socket.off('night:effect', onNightEff);
+  }, [socket]);
 
   useEffect(() => {
     preloadRoomVillagers(activePlayers.map((p) => p.avatarId));
   }, [activePlayers]);
 
-  // Reset per-phase transient target & witch state when transitioning phase/stage/day
   useEffect(() => {
     setSelectedTargetId(null);
     setTagMenuOpen(false);
     setWitchMode('idle');
     setCupidPick([]);
+    if (room.phase !== PHASES.DAY_DISCUSS) {
+      setVoteModalOpen(false);
+    }
   }, [room.phase, room.nightStage, room.dayCount]);
 
-  // Popup Seer crystal ball result immediately so player sees it even when RolePanel is closed
   useEffect(() => {
     const hist = priv?.seerHistory || [];
     if (hist.length > prevSeerCountRef.current) {
@@ -146,7 +294,6 @@ export default function VillageArena({
     }
   }, [priv?.seerHistory]);
 
-  // Trigger hit-emote when throwable projectile lands
   useEffect(() => {
     const timers = [];
     for (const proj of projectiles || []) {
@@ -162,7 +309,6 @@ export default function VillageArena({
     return () => timers.forEach(clearTimeout);
   }, [projectiles]);
 
-  // Trigger defense plea emote when an accused player steps forward
   useEffect(() => {
     const key = room.phase === PHASES.DAY_DEFENSE && room.accusedId ? `${room.dayCount}-${room.accusedId}` : null;
     if (key && prevDefenseKeyRef.current !== key) {
@@ -173,14 +319,48 @@ export default function VillageArena({
     }
   }, [room.phase, room.dayCount, room.accusedId]);
 
+  const bindActorDom = (id, part) => (el) => {
+    if (!actorNodeMapRef.current.has(id)) {
+      actorNodeMapRef.current.set(id, {});
+    }
+    const entry = actorNodeMapRef.current.get(id);
+    if (el) entry[part] = el;
+    else if (entry) delete entry[part];
+  };
+
   const triggerHeavyShake = () => {
     setArenaShake(true);
     setTimeout(() => setArenaShake(false), 180);
   };
 
+  // Helper: Sprint hero to target's courtyard spot if far during Night before firing skill!
+  const performOrWalkNightAction = (targetPlayer, actionFn) => {
+    if (!me || !targetPlayer || !canMoveNow) {
+      actionFn();
+      return;
+    }
+    const hero = controller.actorsRef.current.get(me.id);
+    const tgt = controller.actorsRef.current.get(targetPlayer.id);
+    const hx = hero?.x ?? me.x ?? 800;
+    const hy = hero?.y ?? me.y ?? 650;
+    const tx = tgt?.x ?? targetPlayer.sleepOrigin?.x ?? targetPlayer.x ?? 800;
+    const ty = tgt?.y ?? targetPlayer.sleepOrigin?.y ?? targetPlayer.y ?? 650;
+    const dist = Math.hypot(tx - hx, ty - hy);
+    if (dist > DEFAULT_MOVEMENT_CONFIG.nightActionRange) {
+      controller.setWaypoint(tx, ty, {
+        arriveRadius: DEFAULT_MOVEMENT_CONFIG.nightActionRange * 0.85,
+        fast: true,
+        onArrive: actionFn,
+      });
+    } else {
+      actionFn();
+    }
+  };
+
   const skipVotes = room.skipVotes || [];
   const iSkipped = me ? skipVotes.includes(me.id) : false;
   const canSkipNow =
+    !isLobbyCourtyard &&
     me?.alive &&
     !me?.isSpectator &&
     [PHASES.DAY_DISCUSS, PHASES.DAY_DEFENSE, PHASES.NIGHT].includes(room.phase);
@@ -224,19 +404,16 @@ export default function VillageArena({
   const getEyeState = (p) => {
     if (!p.alive) return 'awake';
     if (!isNight) return 'awake';
-    if (me?.alive && isWolfRole(myRole)) {
-      if (p.role && isWolfRole(p.role)) return 'wolf';
-      return 'sleep';
-    }
+    if (isWolfRole(p.role) && p.wolfTransformed) return 'wolf';
     if (p.id === me?.id && isMySoloNightTurn) return 'awake';
+    if (p.nightActorVisible && (!me?.alive || p.id === me?.id)) return 'awake';
     return 'sleep';
   };
 
-  // Determines whether tapping player `p` picks a skill/vote target right now
   const isTargetableNow = (p) => {
     if (selectedThrow) return true;
     if (!p.alive) return false;
-    if (isHunterActive) return p.id !== me?.id; // NOTE: Hunter is ALREADY dead here — no alive check on `me`!
+    if (isHunterActive) return p.id !== me?.id;
     if (!me?.alive || me?.isSpectator) return false;
 
     if (room.phase === PHASES.DAY_DISCUSS) return true;
@@ -281,33 +458,41 @@ export default function VillageArena({
 
       setSelectedTargetId(p.id);
       if (isWolfTurn) {
-        // Preview bite highlight for wolf pack WITHOUT prematurely locking night!
         onNightWolfVote(p.id, false, false);
       }
       return;
     }
 
-    // Outside active target turns: clicking selects for suspect tagging if clicking another player
     setSelectedTargetId((cur) => (cur === p.id ? null : p.id));
     setTagMenuOpen(false);
   };
 
-  const count = activePlayers.length;
-  const compact = size.w < 640 || size.h < 540;
-  const baseSprite = compact
-    ? ARENA_LAYOUT.spriteSizeMobile
-    : size.w > 980
-      ? ARENA_LAYOUT.spriteSizeDesktop
-      : ARENA_LAYOUT.spriteSizeTablet;
-  const rx = Math.max(105, Math.min(size.w * ARENA_LAYOUT.ellipseRxRatio, size.w / 2 - 82));
-  const ry = Math.max(74, Math.min(size.h * ARENA_LAYOUT.ellipseRyRatio, size.h / 2 - 114));
-  const centerYOffset = size.h * ARENA_LAYOUT.centerYOffsetRatio;
+  const handleStageClick = (e) => {
+    setSelectedTargetId(null);
+    setTagMenuOpen(false);
+    if (controller.settings.clickToMove && canMoveNow) {
+      const st = stageTransformRef.current;
+      const wx = (e.clientX - st.rectLeft) / st.scale + st.camX;
+      const wy = (e.clientY - st.rectTop) / st.scale + st.camY;
+      controller.setWaypoint(wx, wy);
+    }
+  };
+
+  const visibleActors = useMemo(
+    () => activePlayers.filter((p) => p.alive || p.ghostVisible || room.phase === PHASES.GAME_OVER),
+    [activePlayers, room.phase]
+  );
+
+  // Non-lynched corpses stay lying on the ground at their exact death site until GAME_OVER
+  const groundCorpses = useMemo(
+    () => activePlayers.filter((p) => !p.alive && p.deathInfo && p.deathInfo.cause !== 'lynch'),
+    [activePlayers]
+  );
 
   const myDayVote = me ? room.publicDayVotes?.[me.id]?.targetId : null;
   const myVerdictVote = me ? room.publicVerdictVotes?.[me.id]?.choice : null;
   const accusedPlayer = room.accusedId ? room.players.find((p) => p.id === room.accusedId) : null;
   const witchVictim = priv?.witchVictimId ? room.players.find((p) => p.id === priv.witchVictimId) : null;
-
   const myWolfTargetId = priv?.wolfVotes?.[me?.id] || selectedTargetId;
   const activeTargetId = isWolfTurn ? myWolfTargetId : selectedTargetId;
   const activeTarget = activeTargetId ? room.players.find((p) => p.id === activeTargetId) : null;
@@ -318,72 +503,572 @@ export default function VillageArena({
     dismissedConvertDay !== room.dayCount &&
     (room.phase === PHASES.DAWN || room.phase === PHASES.DAY_DISCUSS);
 
+  const showTouchJoystick =
+    controller.settings.touchMode === 'always' || (controller.settings.touchMode === 'auto' && isTouchDevice);
+
+  const castVoteCount = Object.keys(room.publicDayVotes || {}).length;
+
   return (
     <div
       ref={containerRef}
-      onClick={() => {
-        setSelectedTargetId(null);
-        setTagMenuOpen(false);
+      onClick={handleStageClick}
+      onContextMenu={(e) => {
+        if (!canMoveNow) return;
+        e.preventDefault();
+        const st = stageTransformRef.current;
+        const wx = (e.clientX - st.rectLeft) / st.scale + st.camX;
+        const wy = (e.clientY - st.rectTop) / st.scale + st.camY;
+        controller.setWaypoint(wx, wy);
       }}
+      onPointerMove={controller.handleArenaPointerMove}
       className={`relative w-full h-full overflow-hidden select-none bg-[#171211] ${arenaShake ? 'anim-arena-shake' : ''}`}
     >
-      {/* LAYER 1: Full-Bleed Crossfading Painted 2.5D Day & Night Backgrounds */}
+      {/* CAMERA-TRACKED 1600x900 2.5D COURTYARD WORLD */}
       <div
-        className="pointer-events-none absolute inset-0 bg-cover bg-center transition-opacity duration-1000"
+        ref={cameraRef}
         style={{
-          backgroundImage: `url('${ASSET_PATHS.dayBackground}')`,
-          opacity: isNight ? 0 : 1,
+          width: WORLD_WIDTH,
+          height: WORLD_HEIGHT,
+          transformOrigin: 'top left',
+          transform: `scale(${stageTransformRef.current.scale}) translate3d(${-stageTransformRef.current.camX}px, ${-stageTransformRef.current.camY}px, 0)`,
         }}
-      />
-      <div
-        className="pointer-events-none absolute inset-0 bg-cover bg-center transition-opacity duration-1000"
-        style={{
-          backgroundImage: `url('${ASSET_PATHS.nightBackground}')`,
-          opacity: isNight ? 1 : 0,
-        }}
-      />
+        className="absolute top-0 left-0 will-change-transform"
+      >
+        {/* LAYER 1: Day / Night Painted Sân Đình Backgrounds */}
+        <div
+          className="pointer-events-none absolute inset-0 bg-cover bg-center transition-opacity duration-1000"
+          style={{
+            backgroundImage: `url('${ASSET_PATHS.dayBackground}')`,
+            opacity: isNight ? 0 : 1,
+          }}
+        />
+        <div
+          className="pointer-events-none absolute inset-0 bg-cover bg-center transition-opacity duration-1000"
+          style={{
+            backgroundImage: `url('${ASSET_PATHS.nightBackground}')`,
+            opacity: isNight ? 1 : 0,
+          }}
+        />
 
-      {/* Top-Center Supercell Timer Capsule */}
-      <div className="absolute top-2.5 left-1/2 -translate-x-1/2 z-30 flex flex-col items-center gap-1.5 max-w-[92vw]">
-        <div className="sc-timer-pill px-4 py-1.5 flex items-center gap-2.5">
-          <span className="text-lg leading-none">{isNight ? '🌙' : '☀️'}</span>
-          {room.phaseEndsAt && (
-            <span
-              className={`font-black text-base sm:text-xl tracking-wider leading-none ${
-                secondsLeft <= 5 ? 'text-red-400 animate-pulse' : 'text-white'
-              }`}
+        {/* Debug Collision Overlay (Toggle via ESC Menu) */}
+        {controller.settings.showColliders && (
+          <svg
+            viewBox={`0 0 ${WORLD_WIDTH} ${WORLD_HEIGHT}`}
+            className="pointer-events-none absolute inset-0 w-full h-full z-[990]"
+          >
+            <ellipse
+              cx={ARENA_WALKABLE_BOUNDS.cx}
+              cy={ARENA_WALKABLE_BOUNDS.cy}
+              rx={ARENA_WALKABLE_BOUNDS.rx}
+              ry={ARENA_WALKABLE_BOUNDS.ry}
+              fill="none"
+              stroke="#22d3ee"
+              strokeWidth="3"
+              strokeDasharray="10 6"
+            />
+            {ARENA_COLLIDERS.map((col) =>
+              col.shape === 'circle' ? (
+                <g key={col.id}>
+                  <circle cx={col.x} cy={col.y} r={col.r} fill="rgba(239,68,68,0.22)" stroke="#f87171" strokeWidth="2.5" />
+                  <text x={col.x} y={col.y} textAnchor="middle" fill="#fff" fontSize="13" fontWeight="bold">
+                    {col.label}
+                  </text>
+                </g>
+              ) : (
+                <g key={col.id}>
+                  <rect
+                    x={col.minX}
+                    y={col.minY}
+                    width={col.maxX - col.minX}
+                    height={col.maxY - col.minY}
+                    fill="rgba(239,68,68,0.22)"
+                    stroke="#f87171"
+                    strokeWidth="2.5"
+                  />
+                  <text
+                    x={(col.minX + col.maxX) / 2}
+                    y={(col.minY + col.maxY) / 2}
+                    textAnchor="middle"
+                    fill="#fff"
+                    fontSize="13"
+                    fontWeight="bold"
+                  >
+                    {col.label}
+                  </text>
+                </g>
+              )
+            )}
+          </svg>
+        )}
+
+        {/* LAYER 2: Gallows Stage (Trăn Trối & Persistent Hanged Corpses) */}
+        <GallowsStage players={activePlayers} accusedId={room.accusedId} phase={room.phase} />
+
+        {/* LAYER 3: Persistent Ground Crime Scene Corpses (until GAME_OVER) */}
+        {groundCorpses.map((p) => {
+          const cx = p.deathInfo.x ?? 800;
+          const cy = p.deathInfo.y ?? 650;
+          const causeLabel =
+            p.deathInfo.cause === 'wolf'
+              ? '🐺 Vết Sói cắn'
+              : p.deathInfo.cause === 'poison'
+                ? '🧪 Trúng độc'
+                : p.deathInfo.cause === 'hunter'
+                  ? '🔫 Bị bắn'
+                  : '💔 Tình nhân';
+          return (
+            <div
+              key={`corpse-${p.id}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                setSelectedTargetId((cur) => (cur === p.id ? null : p.id));
+              }}
+              style={{
+                left: `${cx}px`,
+                top: `${cy}px`,
+                zIndex: Math.max(12, Math.round(cy - 18)),
+                transform: 'translate(-50%, -62%)',
+              }}
+              className="absolute w-28 h-28 flex flex-col items-center justify-center cursor-pointer"
             >
-              {formatClock(secondsLeft)}
-            </span>
-          )}
-          <span className="text-[11px] font-extrabold uppercase text-amber-300 border-l border-white/20 pl-2 whitespace-nowrap">
-            {room.phase === PHASES.ROLE_REVEAL && 'CHIA BÀI'}
-            {room.phase === PHASES.NIGHT && `ĐÊM ${room.dayCount}`}
-            {room.phase === PHASES.DAWN && `BÌNH MINH ${room.dayCount}`}
-            {room.phase === PHASES.HUNTER_SHOT && 'THỢ SĂN'}
-            {room.phase === PHASES.DAY_DISCUSS && `NGÀY ${room.dayCount}`}
-            {room.phase === PHASES.DAY_DEFENSE && 'TRĂN TRỐI'}
-            {room.phase === PHASES.DAY_VERDICT && 'PHÁN QUYẾT'}
-          </span>
+              <img
+                src={ASSET_PATHS.deathDecal(p.deathInfo.cause)}
+                alt=""
+                draggable={false}
+                className="pointer-events-none absolute -bottom-2 w-28 h-20 object-contain opacity-95"
+              />
+              <div className="relative z-10 -rotate-[82deg] translate-y-2 saturate-75 brightness-90">
+                <VillagerPuppetRig avatarId={p.avatarId} size={78} pose="corpse" emoteHead={true} />
+              </div>
+              <span className="relative z-20 -mt-1 rounded-full bg-red-950/95 border border-[#140f0e] px-2 py-0.5 text-[10px] font-black text-red-200 whitespace-nowrap shadow">
+                ☠️ {p.name} • {causeLabel}
+              </span>
+            </div>
+          );
+        })}
+
+        {/* LAYER 4: Campfire Center */}
+        <CampfireCenter isNight={isNight} />
+
+        {/* LAYER 5: Footstep Dust & Melee Slash Arcs */}
+        {dustPuffs.map((d) => (
+          <div
+            key={d.id}
+            style={{ left: d.x, top: d.y, zIndex: Math.round(d.y + 4) }}
+            className="pointer-events-none absolute anim-dust-puff flex gap-1"
+          >
+            <span className="w-3.5 h-3.5 rounded-full bg-amber-100/75 blur-[1px]" />
+            {d.count > 3 && <span className="w-2.5 h-2.5 rounded-full bg-amber-200/70 blur-[1px]" />}
+          </div>
+        ))}
+
+        {slashVfx.map((fx) => {
+          const isKick = fx.type === 'kick';
+          const angle = Math.atan2(fx.dirY || 0, fx.dirX || 1) * (180 / Math.PI);
+          return (
+            <div
+              key={fx.id}
+              style={{
+                left: fx.x + (fx.dirX || 1) * 42,
+                top: fx.y - 34 + (fx.dirY || 0) * 32,
+                zIndex: 880,
+                transform: `translate(-50%, -50%) rotate(${angle}deg)`,
+              }}
+              className="pointer-events-none absolute"
+            >
+              <div
+                className={`anim-melee-arc rounded-full ${
+                  isKick
+                    ? 'w-20 h-20 border-r-[7px] border-t-[4px] border-orange-400 shadow-[0_0_16px_#f97316]'
+                    : 'w-14 h-14 border-r-[5px] border-t-[3px] border-amber-300 shadow-[0_0_12px_#fde047]'
+                }`}
+              />
+              <span className="absolute -top-5 left-0 font-black text-xs text-amber-300 drop-shadow-[0_2px_0_#140f0e] whitespace-nowrap">
+                {isKick ? 'BÙM! 🦵' : 'BỐP! 👊'}
+              </span>
+            </div>
+          );
+        })}
+
+        {/* LAYER 6: Night Visual Skill Effects (Visible ONLY to Ghosts, Caster, & Wolves) */}
+        {nightEffects.map((eff) => {
+          const meta = NIGHT_EFFECT_META[eff.effectType] || NIGHT_EFFECT_META.seer;
+          return (eff.targetIds || []).map((tid) => {
+            const tp = room.players.find((x) => x.id === tid);
+            if (!tp) return null;
+            const livePos = controller.actorsRef.current.get(tid);
+            const ex = livePos?.x ?? tp.sleepOrigin?.x ?? tp.x ?? 800;
+            const ey = livePos?.y ?? tp.sleepOrigin?.y ?? tp.y ?? 600;
+            return (
+              <div
+                key={`${eff.id}-${tid}`}
+                style={{ left: ex, top: ey - 32, zIndex: 920 }}
+                className={`pointer-events-none absolute anim-night-pulse w-28 h-28 rounded-full border-4 flex flex-col items-center justify-center ${meta.color}`}
+              >
+                <span className="text-2xl">{meta.icon}</span>
+                <span className="text-[10px] font-black text-white drop-shadow">{meta.label}</span>
+              </div>
+            );
+          });
+        })}
+
+        {/* LAYER 7: Flying Throwables */}
+        <div className="pointer-events-none absolute inset-0 z-[900] overflow-hidden">
+          {projectiles.map((proj) => {
+            const item = INTERACTIONS.find((i) => i.id === proj.itemId);
+            if (!item) return null;
+            return (
+              <div
+                key={proj.id}
+                className="absolute text-4xl"
+                style={{
+                  left: '50%',
+                  top: '55%',
+                  animation: 'flyProjectile 0.85s ease-out forwards',
+                  '--from-x': `${proj.fromOffsetX}px`,
+                  '--from-y': `${proj.fromOffsetY}px`,
+                  '--to-x': `${proj.toOffsetX}px`,
+                  '--to-y': `${proj.toOffsetY}px`,
+                }}
+              >
+                {item.emoji}
+              </div>
+            );
+          })}
         </div>
 
-        {selectedThrow && (
-          <div className="rounded-full bg-sky-400 text-black border-2 border-[#0b0d17] px-3 py-0.5 text-xs font-extrabold shadow flex items-center gap-2">
-            <span>🎯 Chạm thẳng vào người muốn ném</span>
-            <button type="button" onClick={onClearThrow} className="underline cursor-pointer">
-              Hủy
-            </button>
-          </div>
-        )}
+        {/* LAYER 8: 60 FPS Y-Sorted Actors (Living Players, Transformed Night Wolves & Ghosts) */}
+        {visibleActors.map((p, idx) => {
+          const isMe = p.id === me?.id;
+          const isAccused =
+            (room.phase === PHASES.DAY_DEFENSE || room.phase === PHASES.DAY_VERDICT) &&
+            room.accusedId === p.id;
+          const isSpeaking = Boolean(speakingPeers[p.id]);
+          const voteCount = dayVoteTally[p.id] || 0;
+          const tagId = suspectTags[p.id];
+          const tagDef = tagId ? SUSPECT_TAGS.find((t) => t.id === tagId) : null;
+          const wolfTargeting =
+            isNight && isWolfRole(myRole) && Object.values(priv?.wolfVotes || {}).includes(p.id);
+          const wolfCurseTarget = wolfTargeting && Boolean(priv?.curseActive);
+          const cupidPicked = cupidPick.includes(p.id);
+          const isSelected = activeTargetId === p.id || cupidPicked;
+          const targetable = isTargetableNow(p);
 
-        {isHunterActive && (
-          <div className="rounded-xl bg-red-600/95 border-2 border-[#140f0e] px-3.5 py-1.5 text-xs font-black text-white shadow-lg animate-pulse text-center">
-            🏹 BẠN ĐÃ HY SINH! Chạm vào 1 người còn sống rồi bấm BẮN KÉO THEO!
-          </div>
-        )}
+          const reactions = activeReactions.filter((r) => r.targetId === p.id);
+          const bubble = chatBubbles[p.id];
+
+          const aState = actorAnims[p.id] || {
+            anim: !p.alive ? 'ghost' : p.anim || 'idle',
+            wolf: Boolean(p.wolfTransformed),
+          };
+          const wolfRoleSprite = aState.wolf ? (p.role === 'cursed_wolf' ? 'cursed_wolf' : 'werewolf') : null;
+          const initX = p.x ?? 800;
+          const initY = p.y ?? 650;
+
+          return (
+            <div
+              key={p.id}
+              ref={bindActorDom(p.id, 'root')}
+              onClick={(e) => handleSeatClick(e, p)}
+              style={{
+                left: 0,
+                top: 0,
+                width: 96,
+                height: 102,
+                transform: `translate3d(${initX}px, ${initY}px, 0) translate(-50%, -88%)`,
+                zIndex: isSelected ? 910 : Math.round(initY),
+              }}
+              className={`absolute flex flex-col items-center justify-end ${
+                targetable || selectedThrow ? 'cursor-pointer' : ''
+              }`}
+            >
+              {/* Ground shadow stays anchored on bricks while body jumps/floats */}
+              <div
+                ref={bindActorDom(p.id, 'shadow')}
+                className={`pointer-events-none absolute bottom-1 left-1/2 -translate-x-1/2 rounded-full blur-[1px] ${
+                  wolfRoleSprite ? 'bg-red-800/65 shadow-[0_0_12px_rgba(239,68,68,0.8)]' : 'bg-black/50'
+                }`}
+                style={{ width: 58, height: 15 }}
+              />
+
+              {bubble && (
+                <div
+                  key={bubble.id}
+                  className="anim-chat-bubble pointer-events-none absolute -top-9 left-1/2 z-40 max-w-[160px] rounded-xl bg-white text-black px-2.5 py-0.5 text-[11px] font-extrabold shadow-lg border-2 border-[#0b0d17] truncate"
+                >
+                  {bubble.text}
+                </div>
+              )}
+
+              {reactions.map((r) => {
+                const item = INTERACTIONS.find((i) => i.id === r.itemId);
+                return (
+                  <div
+                    key={r.id}
+                    className="anim-reaction pointer-events-none absolute -top-6 left-1/2 z-40 text-2xl drop-shadow"
+                  >
+                    {item?.emoji}
+                  </div>
+                );
+              })}
+
+              {/* 60 FPS Body Rig (Z-jump, facing flip, run tilt) */}
+              <div
+                ref={bindActorDom(p.id, 'body')}
+                style={{ transformOrigin: '50% 88%' }}
+                className={`relative rounded-full ${isSpeaking ? 'speaking-ring' : ''} ${
+                  isSelected
+                    ? isHunterActive
+                      ? 'ring-3 ring-red-500 shadow-[0_0_16px_rgba(239,68,68,0.9)]'
+                      : wolfCurseTarget
+                        ? 'ring-3 ring-purple-400 shadow-[0_0_16px_rgba(192,132,252,0.9)]'
+                        : 'ring-3 ring-amber-400 shadow-[0_0_14px_rgba(251,191,36,0.85)]'
+                    : ''
+                }`}
+              >
+                <div className="pointer-events-none absolute -top-1 -left-2 flex gap-0.5 text-xs z-20">
+                  {p.mayorRevealed && <span>🎖️</span>}
+                  {p.isLover && <span>💘</span>}
+                  {p.role && isWolfRole(p.role) && !isMe && <span>🐺</span>}
+                  {!p.alive && <span title="Hồn ma">👻</span>}
+                  {wolfCurseTarget ? (
+                    <span className="animate-bounce">🩸</span>
+                  ) : (
+                    wolfTargeting && <span className="animate-bounce">🐾</span>
+                  )}
+                  {cupidPicked && <span>💘</span>}
+                  {isHunterActive && p.alive && p.id !== me?.id && isSelected && <span>🎯</span>}
+                </div>
+
+                <PixelVillager
+                  avatarId={p.avatarId}
+                  alive={p.alive}
+                  size={96}
+                  hideShadow={true}
+                  isNight={isNight}
+                  eyeState={getEyeState(p)}
+                  animState={aState.anim}
+                  wolfFormRole={wolfRoleSprite}
+                  isSpeaking={isSpeaking}
+                  isAccused={isAccused}
+                  emoteKey={emoteTriggers[p.id] ?? null}
+                  staggerIndex={idx}
+                  enablePoke={false}
+                  onHeavyImpact={triggerHeavyShake}
+                />
+              </div>
+
+              {/* Nameplate & Badges */}
+              <div className="relative z-30 flex items-center gap-1 -mt-1">
+                <span
+                  className={`sc-nameplate px-2.5 py-0.5 text-[11px] font-extrabold max-w-[116px] truncate ${
+                    isMe
+                      ? 'text-amber-300 border-amber-400/80'
+                      : !p.alive
+                        ? 'text-sky-300 border-sky-400/60'
+                        : wolfRoleSprite
+                          ? 'text-red-300 border-red-500/70'
+                          : 'text-white'
+                  }`}
+                >
+                  {!p.alive ? `👻 ${p.name}` : wolfRoleSprite ? `🐺 ${p.name}` : p.name}
+                </span>
+                {voteCount > 0 && (room.phase === PHASES.DAY_DISCUSS || room.phase === PHASES.DAY_DEFENSE) && (
+                  <span className="rounded-full bg-rose-600 px-1.5 py-0.5 text-[10px] font-black text-white border-2 border-[#090b14]">
+                    {voteCount}
+                  </span>
+                )}
+              </div>
+
+              {tagDef && (
+                <span
+                  className="mt-0.5 px-1.5 py-0.2 rounded-full text-[9.5px] font-extrabold bg-[#191413]/95 border border-black"
+                  style={{ color: tagDef.color }}
+                >
+                  {tagDef.icon} {tagDef.label}
+                </span>
+              )}
+            </div>
+          );
+        })}
       </div>
 
-      {/* Prominent Floating Seer Result Toast */}
+      {/* =====================================================================
+          SCREEN-SPACE HUD OVERLAYS
+         ===================================================================== */}
+
+      {/* LOBBY COURTYARD TOP BAR */}
+      {isLobbyCourtyard ? (
+        <div
+          onClick={(e) => e.stopPropagation()}
+          className="absolute top-2.5 inset-x-2.5 z-40 flex flex-wrap items-center justify-between gap-2 pointer-events-none"
+        >
+          <div className="pointer-events-auto flex items-center gap-1.5 flex-wrap">
+            <div className="sc-timer-pill px-3 py-1.5 flex items-center gap-2 text-xs">
+              <span className="font-brand text-amber-300">🏡 SÂN CHỜ TỰ DO</span>
+              <span className="text-sky-300 font-black">#{room.code}</span>
+              <span className="text-slate-300 text-[11px]">({room.players.length}/16)</span>
+            </div>
+            <button
+              type="button"
+              onClick={onCopyInvite}
+              className="ggd-btn bg-sky-400 text-black px-2.5 py-1.5 text-xs"
+            >
+              {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+              <span className="hidden sm:inline">{copied ? 'Đã Copy!' : 'Mời Bạn'}</span>
+            </button>
+            {isHost && (
+              <button
+                type="button"
+                onClick={onAddBot}
+                className="ggd-btn bg-indigo-500 text-white px-2.5 py-1.5 text-xs"
+              >
+                <Bot className="w-3.5 h-3.5" />
+                <span>+ Bot AI</span>
+              </button>
+            )}
+          </div>
+
+          <div className="pointer-events-auto flex items-center gap-1.5 flex-wrap">
+            <button
+              type="button"
+              onClick={onOpenLobbySettings}
+              className="ggd-btn bg-[#faf3e6] text-[#262121] px-3 py-1.5 text-xs"
+            >
+              <Settings className="w-3.5 h-3.5" />
+              <span>Cài Đặt Phòng & Vai Trò</span>
+            </button>
+            {isHost && (
+              <button
+                type="button"
+                onClick={() => {
+                  setLobbyError('');
+                  onStartGame?.((res) => {
+                    if (!res?.ok) setLobbyError(res?.error || 'Không thể bắt đầu!');
+                  });
+                }}
+                className="ggd-btn bg-emerald-400 text-black px-3.5 py-1.5 text-xs sm:text-sm"
+              >
+                <Play className="w-4 h-4" />
+                <span>Bắt Đầu</span>
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={onOpenAudioMixer}
+              className="ggd-btn bg-[#1f2542]/95 p-1.5 text-amber-300"
+              title="Cài đặt âm thanh"
+            >
+              <SlidersHorizontal className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setPauseOpen(true)}
+              className="ggd-btn bg-[#1f2542]/95 px-2.5 py-1.5 text-xs text-white"
+              title="Menu Tạm Dừng (ESC)"
+            >
+              <Pause className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">ESC</span>
+            </button>
+          </div>
+
+          {lobbyError && (
+            <div className="pointer-events-auto w-full max-w-md mx-auto rounded-xl bg-red-950/95 border-2 border-red-500 px-3 py-1.5 text-xs font-bold text-red-200 text-center">
+              ⚠️ {lobbyError}
+            </div>
+          )}
+        </div>
+      ) : (
+        /* IN-GAME TOP-CENTER TIMER CAPSULE + VOTE MODAL TRIGGER */
+        <div className="absolute top-2.5 left-1/2 -translate-x-1/2 z-30 flex flex-col items-center gap-1.5 max-w-[92vw]">
+          <div className="flex items-center gap-2">
+            <div className="sc-timer-pill px-4 py-1.5 flex items-center gap-2.5">
+              <span className="text-lg leading-none">{isNight ? '🌙' : '☀️'}</span>
+              {room.phaseEndsAt && (
+                <span
+                  className={`font-black text-base sm:text-xl tracking-wider leading-none ${
+                    secondsLeft <= 5 ? 'text-red-400 animate-pulse' : 'text-white'
+                  }`}
+                >
+                  {formatClock(secondsLeft)}
+                </span>
+              )}
+              <span className="text-[11px] font-extrabold uppercase text-amber-300 border-l border-white/20 pl-2 whitespace-nowrap">
+                {room.phase === PHASES.ROLE_REVEAL && 'CHIA BÀI'}
+                {room.phase === PHASES.NIGHT && `ĐÊM ${room.dayCount}`}
+                {room.phase === PHASES.DAWN && `BÌNH MINH ${room.dayCount}`}
+                {room.phase === PHASES.HUNTER_SHOT && 'THỢ SĂN'}
+                {room.phase === PHASES.DAY_DISCUSS && `NGÀY ${room.dayCount}`}
+                {room.phase === PHASES.DAY_DEFENSE && 'TRĂN TRỐI'}
+                {room.phase === PHASES.DAY_VERDICT && 'PHÁN QUYẾT'}
+              </span>
+            </div>
+
+            {room.phase === PHASES.DAY_DISCUSS && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  sfx.play('click');
+                  setVoteModalOpen(true);
+                }}
+                className="sc-btn-orange px-3 py-1.5 text-xs"
+              >
+                <Vote className="w-4 h-4" />
+                <span>Bảng Vote ({castVoteCount}/{alivePlayers.length})</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setPauseOpen(true);
+              }}
+              className="ggd-btn bg-[#1f2542]/95 p-2 text-amber-200"
+              title="Cài đặt điều khiển (ESC)"
+            >
+              <Pause className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          {selectedThrow && (
+            <div className="rounded-full bg-sky-400 text-black border-2 border-[#0b0d17] px-3 py-0.5 text-xs font-extrabold shadow flex items-center gap-2">
+              <span>🎯 Chạm thẳng vào người muốn ném</span>
+              <button type="button" onClick={onClearThrow} className="underline cursor-pointer">
+                Hủy
+              </button>
+            </div>
+          )}
+
+          {isHunterActive && (
+            <div className="rounded-xl bg-red-600/95 border-2 border-[#140f0e] px-3.5 py-1.5 text-xs font-black text-white shadow-lg animate-pulse text-center">
+              🏹 BẠN ĐÃ HY SINH! Chạm vào 1 người còn sống rồi bấm BẮN KÉO THEO!
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Subtle PC Controls Pill (Dismissible) */}
+      {isLobbyCourtyard && controlsHintOpen && !isTouchDevice && (
+        <div
+          onClick={(e) => e.stopPropagation()}
+          className="absolute top-14 left-3 z-30 rounded-xl bg-[#191413]/88 border border-amber-400/40 px-2.5 py-1.5 text-[10.5px] text-amber-100 flex items-center gap-2 shadow-lg max-w-[92vw]"
+        >
+          <span>
+            <b>WASD</b> Chạy • <b>Shift</b> Nhanh • <b>Space</b> Nhảy • <b>J</b> Đấm 👊 • <b>K</b> Đá 🦵 • <b>ESC</b> Cài đặt
+          </span>
+          <button
+            type="button"
+            onClick={() => setControlsHintOpen(false)}
+            className="text-slate-400 hover:text-white cursor-pointer"
+          >
+            <X className="w-3 h-3" />
+          </button>
+        </div>
+      )}
+
+      {/* Seer Result Toast */}
       {seerToast && (room.phase === PHASES.NIGHT || room.phase === PHASES.DAWN) && (
         <div className="absolute top-16 left-1/2 -translate-x-1/2 z-[115] ggd-card px-4 py-2.5 flex items-center gap-3 shadow-2xl border-sky-400 max-w-[90vw]">
           <span className="text-2xl">🔮</span>
@@ -406,7 +1091,7 @@ export default function VillageArena({
         </div>
       )}
 
-      {/* Prominent Cursed Wolf Assimilation Notice */}
+      {/* Cursed Wolf Assimilation Notice */}
       {showConvertedBanner && (
         <div className="absolute top-16 left-1/2 -translate-x-1/2 z-[116] ggd-card px-4 py-2.5 border-red-500 bg-red-950/95 flex items-center gap-3 shadow-2xl max-w-[92vw]">
           <span className="text-2xl">🩸</span>
@@ -424,20 +1109,7 @@ export default function VillageArena({
         </div>
       )}
 
-      {/* Center Campfire (Z = 50) */}
-      <div
-        className="absolute left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center"
-        style={{ top: `calc(50% + ${centerYOffset}px)`, zIndex: 50 }}
-      >
-        <CampfireCenter isNight={isNight} />
-        {room.phase === PHASES.DAY_DEFENSE && accusedPlayer && (
-          <div className="mt-1 px-3 py-0.5 rounded-full bg-red-600 border-2 border-[#090b14] text-[11px] font-extrabold text-white whitespace-nowrap animate-pulse shadow">
-            🎙️ {accusedPlayer.name} trăn trối
-          </div>
-        )}
-      </div>
-
-      {/* Dawn Death Banner */}
+      {/* Dawn Banner */}
       {room.phase === PHASES.DAWN && !showConvertedBanner && (
         <div className="absolute top-16 left-1/2 -translate-x-1/2 z-[110] ggd-card px-4 py-2.5 text-center max-w-xs sm:max-w-md">
           <div className="text-xs sm:text-sm font-extrabold text-amber-200">
@@ -455,168 +1127,21 @@ export default function VillageArena({
         </div>
       )}
 
-      {/* Flying Throwables */}
-      <div className="pointer-events-none absolute inset-0 z-[120] overflow-hidden">
-        {projectiles.map((proj) => {
-          const item = INTERACTIONS.find((i) => i.id === proj.itemId);
-          if (!item) return null;
-          return (
-            <div
-              key={proj.id}
-              className="absolute text-3xl"
-              style={{
-                left: '50%',
-                top: '50%',
-                animation: 'flyProjectile 0.85s ease-out forwards',
-                '--from-x': `${proj.fromOffsetX}px`,
-                '--from-y': `${proj.fromOffsetY}px`,
-                '--to-x': `${proj.toOffsetX}px`,
-                '--to-y': `${proj.toOffsetY}px`,
-              }}
-            >
-              {item.emoji}
-            </div>
-          );
-        })}
-      </div>
+      {/* Defense Plea Banner */}
+      {room.phase === PHASES.DAY_DEFENSE && accusedPlayer && (
+        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-[110] rounded-full bg-red-600/95 border-2 border-[#140f0e] px-4 py-1 text-xs font-black text-white whitespace-nowrap animate-pulse shadow-lg">
+          🎙️ {accusedPlayer.name} đang Trăn Trối trên Giá Treo Cổ!
+        </div>
+      )}
 
-      {/* Y-Sorted Illustrated Villagers around the Sân Đình Plaza */}
-      {activePlayers.map((p, idx) => {
-        const angle = (idx / Math.max(1, count)) * Math.PI * 2 - Math.PI / 2;
-        const isAccused =
-          (room.phase === PHASES.DAY_DEFENSE || room.phase === PHASES.DAY_VERDICT) &&
-          room.accusedId === p.id;
-
-        const rScale = isAccused ? 0.54 : 1;
-        const x = Math.cos(angle) * rx * rScale;
-        const y = Math.sin(angle) * ry * rScale;
-
-        const depthNorm = (y / ry + 1) / 2;
-        const depthScale = isAccused ? 1.12 : 0.9 + depthNorm * 0.16;
-        const zOrder = isAccused ? 85 : 30 + Math.round(depthNorm * 40);
-
-        const isMe = p.id === me?.id;
-        const isSpeaking = Boolean(speakingPeers[p.id]);
-        const voteCount = dayVoteTally[p.id] || 0;
-        const tagId = suspectTags[p.id];
-        const tagDef = tagId ? SUSPECT_TAGS.find((t) => t.id === tagId) : null;
-        const wolfTargeting =
-          isNight && isWolfRole(myRole) && Object.values(priv?.wolfVotes || {}).includes(p.id);
-        const wolfCurseTarget = wolfTargeting && Boolean(priv?.curseActive);
-        const cupidPicked = cupidPick.includes(p.id);
-        const isSelected = activeTargetId === p.id || cupidPicked;
-        const targetable = isTargetableNow(p);
-
-        const reactions = activeReactions.filter((r) => r.targetId === p.id);
-        const bubble = chatBubbles[p.id];
-
-        return (
-          <div
-            key={p.id}
-            onClick={(e) => handleSeatClick(e, p)}
-            style={{
-              left: `calc(50% + ${x}px)`,
-              top: `calc(50% + ${centerYOffset + y}px)`,
-              transform: `translate(-50%, -50%) scale(${depthScale})`,
-              zIndex: isSelected ? 95 : zOrder,
-              animationDelay: `${Math.min(idx * 45, 650)}ms`,
-            }}
-            className={`absolute flex flex-col items-center anim-seat-enter ${
-              targetable || selectedThrow ? 'cursor-pointer' : ''
-            }`}
-          >
-            {bubble && (
-              <div
-                key={bubble.id}
-                className="anim-chat-bubble pointer-events-none absolute -top-9 left-1/2 z-40 max-w-[150px] rounded-xl bg-white text-black px-2.5 py-0.5 text-[11px] font-extrabold shadow-lg border-2 border-[#0b0d17] truncate"
-              >
-                {bubble.text}
-              </div>
-            )}
-
-            {reactions.map((r) => {
-              const item = INTERACTIONS.find((i) => i.id === r.itemId);
-              return (
-                <div
-                  key={r.id}
-                  className="anim-reaction pointer-events-none absolute -top-5 left-1/2 z-40 text-2xl drop-shadow"
-                >
-                  {item?.emoji}
-                </div>
-              );
-            })}
-
-            <div
-              className={`relative rounded-full transition-all ${isSpeaking ? 'speaking-ring' : ''} ${
-                isSelected
-                  ? isHunterActive
-                    ? 'ring-3 ring-red-500 shadow-[0_0_16px_rgba(239,68,68,0.9)]'
-                    : wolfCurseTarget
-                      ? 'ring-3 ring-purple-400 shadow-[0_0_16px_rgba(192,132,252,0.9)]'
-                      : 'ring-3 ring-amber-400 shadow-[0_0_14px_rgba(251,191,36,0.85)]'
-                  : ''
-              }`}
-            >
-              <div className="pointer-events-none absolute -top-1 -left-2 flex gap-0.5 text-xs z-20">
-                {p.mayorRevealed && <span>🎖️</span>}
-                {p.isLover && <span>💘</span>}
-                {p.role && isWolfRole(p.role) && !isMe && <span>🐺</span>}
-                {wolfCurseTarget ? (
-                  <span className="animate-bounce">🩸</span>
-                ) : (
-                  wolfTargeting && <span className="animate-bounce">🐾</span>
-                )}
-                {cupidPicked && <span>💘</span>}
-                {isHunterActive && p.alive && p.id !== me?.id && isSelected && <span>🎯</span>}
-              </div>
-
-              <PixelVillager
-                avatarId={p.avatarId}
-                alive={p.alive}
-                size={baseSprite}
-                isNight={isNight}
-                eyeState={getEyeState(p)}
-                isSpeaking={isSpeaking}
-                isAccused={isAccused}
-                emoteKey={emoteTriggers[p.id] ?? null}
-                staggerIndex={idx}
-                enablePoke={!targetable || isSelected}
-                onHeavyImpact={triggerHeavyShake}
-              />
-            </div>
-
-            <div className="flex items-center gap-1 mt-0.5">
-              <span
-                className={`sc-nameplate px-2.5 py-0.5 text-[10.5px] font-extrabold max-w-[92px] truncate ${
-                  isMe ? 'text-amber-300 border-amber-400/70' : !p.alive ? 'text-slate-400 line-through' : 'text-white'
-                }`}
-              >
-                {p.name}
-              </span>
-              {voteCount > 0 && (room.phase === PHASES.DAY_DISCUSS || room.phase === PHASES.DAY_DEFENSE) && (
-                <span className="rounded-full bg-rose-600 px-1.5 py-0.5 text-[10px] font-black text-white border-2 border-[#090b14]">
-                  {voteCount}
-                </span>
-              )}
-            </div>
-
-            {tagDef && (
-              <span
-                className="mt-0.5 px-1.5 py-0.2 rounded-full text-[9.5px] font-extrabold bg-[#191413]/95 border border-black"
-                style={{ color: tagDef.color }}
-              >
-                {tagDef.icon} {tagDef.label}
-              </span>
-            )}
-          </div>
-        );
-      })}
-
-      {/* Bottom-Right Glossy Orange SKIP Button */}
+      {/* Bottom-Right SKIP Button */}
       {canSkipNow && (
         <button
           type="button"
-          onClick={onToggleSkip}
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleSkip();
+          }}
           className={`sc-btn-orange absolute bottom-3 right-3 z-[100] px-4 py-2 text-xs sm:text-sm ${
             iSkipped ? 'ring-3 ring-emerald-300 brightness-110' : ''
           }`}
@@ -628,12 +1153,11 @@ export default function VillageArena({
         </button>
       )}
 
-      {/* SMART THUMB-FRIENDLY BOTTOM ACTION DOCK */}
+      {/* BOTTOM CENTER ACTION DOCK */}
       <div
         onClick={(e) => e.stopPropagation()}
-        className="absolute bottom-3 left-1/2 -translate-x-1/2 z-[105] flex flex-col items-center gap-1.5 max-w-[56vw] sm:max-w-[66vw]"
+        className="absolute bottom-3 left-1/2 -translate-x-1/2 z-[105] flex flex-col items-center gap-1.5 max-w-[60vw] sm:max-w-[66vw]"
       >
-        {/* Suspect Tag Picker anchored cleanly above dock when user opens Tag for selected player */}
         {tagMenuOpen && activeTarget && (
           <div className="ggd-card p-1.5 flex flex-wrap justify-center gap-1">
             {SUSPECT_TAGS.map((t) => (
@@ -666,7 +1190,29 @@ export default function VillageArena({
         )}
 
         <div className="flex flex-wrap items-center justify-center gap-1.5">
-          {/* HUNTER SHOT DOCK (Active even though Hunter is dead!) */}
+          {/* Quick Melee Buttons on Desktop when in Courtyard / Discuss */}
+          {canMeleeNow && !showTouchJoystick && (
+            <div className="ggd-card p-1 hidden sm:flex items-center gap-1 text-xs">
+              <button
+                type="button"
+                onClick={() => controller.triggerMelee('punch')}
+                className="ggd-btn bg-amber-400 text-black px-2.5 py-1 text-xs"
+                title="Đấm (J)"
+              >
+                👊 Đấm
+              </button>
+              <button
+                type="button"
+                onClick={() => controller.triggerMelee('kick')}
+                className="ggd-btn bg-orange-500 text-white px-2.5 py-1 text-xs"
+                title="Đá văng (K)"
+              >
+                🦵 Đá
+              </button>
+            </div>
+          )}
+
+          {/* HUNTER SHOT */}
           {isHunterActive && (
             <div className="ggd-card p-1.5 flex items-center gap-2 border-red-500">
               {activeTarget && activeTarget.alive && activeTarget.id !== me?.id ? (
@@ -691,7 +1237,18 @@ export default function VillageArena({
           {/* DAY DISCUSS VOTE DOCK */}
           {room.phase === PHASES.DAY_DISCUSS && me?.alive && (
             <div className="ggd-card p-1.5 flex flex-wrap items-center justify-center gap-1.5">
-              {activeTarget && activeTarget.alive ? (
+              <button
+                type="button"
+                onClick={() => {
+                  sfx.play('click');
+                  setVoteModalOpen(true);
+                }}
+                className="ggd-btn bg-[#d65539] text-white px-3 py-1.5 text-xs"
+              >
+                🗳️ Bảng Vote
+              </button>
+
+              {activeTarget && activeTarget.alive && (
                 <button
                   type="button"
                   onClick={() => {
@@ -699,17 +1256,11 @@ export default function VillageArena({
                     onDayVote(activeTarget.id);
                   }}
                   className={`ggd-btn px-3 py-1.5 text-xs ${
-                    room.publicDayVotes?.[me.id]?.targetId === activeTarget.id
-                      ? 'bg-amber-400 text-black'
-                      : 'bg-[#d65539] text-white'
+                    myDayVote === activeTarget.id ? 'bg-amber-400 text-black' : 'bg-rose-700 text-white'
                   }`}
                 >
-                  🗳️ {room.publicDayVotes?.[me.id]?.targetId === activeTarget.id ? 'Đang Vote' : 'Vote Treo'} {activeTarget.name}
+                  ✅ Vote {activeTarget.name}
                 </button>
-              ) : (
-                <span className="px-2 text-[11px] text-amber-200/90 font-bold hidden sm:inline">
-                  👆 Chạm người để Vote
-                </span>
               )}
 
               {activeTarget && (
@@ -717,7 +1268,6 @@ export default function VillageArena({
                   type="button"
                   onClick={() => setTagMenuOpen((o) => !o)}
                   className="ggd-btn bg-[#2c2320] text-amber-200 px-2.5 py-1.5 text-xs"
-                  title="Gắn nhãn nghi ngờ"
                 >
                   <Tag className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">Nhãn</span>
@@ -734,7 +1284,7 @@ export default function VillageArena({
                   myDayVote === 'skip' ? 'bg-amber-400 text-black' : 'bg-[#2c2320] text-slate-100'
                 }`}
               >
-                ⏭️ Không treo
+                ⏭️ Skip
               </button>
 
               {!room.extensionUsedToday && (
@@ -791,13 +1341,17 @@ export default function VillageArena({
                 <button
                   type="button"
                   onClick={() => {
-                    sfx.play('chime');
-                    onNightCupid(cupidPick);
+                    const second = room.players.find((x) => x.id === cupidPick[1]);
+                    const pair = [...cupidPick];
                     setCupidPick([]);
+                    performOrWalkNightAction(second, () => {
+                      sfx.play('chime');
+                      onNightCupid(pair);
+                    });
                   }}
                   className="ggd-btn bg-pink-500 text-white px-3 py-1.5 text-xs"
                 >
-                  💘 Chốt Cặp Đôi
+                  💘 Chạy tới Bắn Tên
                 </button>
               )}
             </div>
@@ -809,57 +1363,63 @@ export default function VillageArena({
               {activeTarget && activeTarget.alive && activeTarget.id !== priv?.lastGuardedId ? (
                 <button
                   type="button"
-                  onClick={() => {
-                    sfx.play('pop');
-                    onNightGuard(activeTarget.id);
-                  }}
+                  onClick={() =>
+                    performOrWalkNightAction(activeTarget, () => {
+                      sfx.play('pop');
+                      onNightGuard(activeTarget.id);
+                    })
+                  }
                   className="ggd-btn bg-sky-400 text-black px-3.5 py-1.5 text-xs"
                 >
-                  🛡️ Bảo Vệ {activeTarget.name}
+                  🛡️ Chạy tới Bảo Vệ {activeTarget.name}
                 </button>
               ) : (
                 <span className="px-2.5 py-1 font-bold text-sky-200">
-                  🛡️ Chạm 1 người để Bảo Vệ đêm nay
+                  🛡️ Chạy lại gần hoặc chạm 1 người để Bảo Vệ
                 </span>
               )}
             </div>
           )}
 
-          {/* NIGHT EARLY: WOLVES (CLEAR SEPARATION BETWEEN BITE vs CURSE) */}
+          {/* NIGHT EARLY: WOLVES */}
           {isNight && room.nightStage === 'EARLY' && me?.alive && isWolfRole(myRole) && (
             <div className="ggd-card p-1.5 flex flex-wrap items-center justify-center gap-1.5 text-xs">
               {priv?.wolfLocked ? (
                 <span className="px-3 py-1 font-bold text-amber-200">
-                  {priv?.curseActive ? '🩸 Đã chốt Nguyền Hóa Sói! Chờ trời sáng...' : '🐺 Đã chốt mục tiêu cắn đêm nay!'}
+                  {priv?.curseActive ? '🩸 Đã chốt Nguyền Hóa Sói!' : '🐺 Đã chốt mục tiêu cắn đêm nay!'}
                 </span>
               ) : activeTarget && activeTarget.alive && !isWolfRole(activeTarget.role) ? (
                 <>
                   <button
                     type="button"
-                    onClick={() => {
-                      sfx.play('bite');
-                      onNightWolfVote(activeTarget.id, false, true);
-                    }}
+                    onClick={() =>
+                      performOrWalkNightAction(activeTarget, () => {
+                        sfx.play('bite');
+                        onNightWolfVote(activeTarget.id, false, true);
+                      })
+                    }
                     className="ggd-btn bg-[#b91c1c] text-white px-3 py-1.5 text-xs"
                   >
-                    🐺 Cắn Giết {activeTarget.name}
+                    🐺 Chạy tới Cắn {activeTarget.name}
                   </button>
                   {myRole === 'cursed_wolf' && !priv?.cursedUsed && (
                     <button
                       type="button"
-                      onClick={() => {
-                        sfx.play('curse');
-                        onNightWolfVote(activeTarget.id, true, true);
-                      }}
+                      onClick={() =>
+                        performOrWalkNightAction(activeTarget, () => {
+                          sfx.play('curse');
+                          onNightWolfVote(activeTarget.id, true, true);
+                        })
+                      }
                       className="ggd-btn bg-purple-600 text-white px-3 py-1.5 text-xs ring-2 ring-red-400"
                     >
-                      🩸 Nguyền {activeTarget.name} Thành Sói (1 lần)
+                      🩸 Chạy tới Nguyền {activeTarget.name}
                     </button>
                   )}
                 </>
               ) : (
                 <span className="px-2.5 py-1 font-bold text-red-200">
-                  🐺 Chạm 1 dân làng để chọn {myRole === 'cursed_wolf' && !priv?.cursedUsed ? 'Cắn hoặc Nguyền' : 'Cắn Giết'}
+                  🐺 Bạn đã hóa Sói! Chạy tới chỗ nạn nhân ngủ để {myRole === 'cursed_wolf' && !priv?.cursedUsed ? 'Cắn hoặc Nguyền' : 'Cắn Giết'}
                 </span>
               )}
             </div>
@@ -871,17 +1431,19 @@ export default function VillageArena({
               {activeTarget && activeTarget.alive && activeTarget.id !== me.id ? (
                 <button
                   type="button"
-                  onClick={() => {
-                    sfx.play('chime');
-                    onNightSeer(activeTarget.id);
-                  }}
+                  onClick={() =>
+                    performOrWalkNightAction(activeTarget, () => {
+                      sfx.play('chime');
+                      onNightSeer(activeTarget.id);
+                    })
+                  }
                   className="ggd-btn bg-indigo-500 text-white px-3.5 py-1.5 text-xs"
                 >
-                  🔮 Soi Vai Trò {activeTarget.name}
+                  🔮 Chạy tới Soi {activeTarget.name}
                 </button>
               ) : (
                 <span className="px-2.5 py-1 font-bold text-indigo-200">
-                  🔮 Chạm 1 người trên sân để Soi
+                  🔮 Chạy tới gần hoặc chạm 1 người để Soi
                 </span>
               )}
             </div>
@@ -893,26 +1455,30 @@ export default function VillageArena({
               {witchVictim && priv?.witchHealLeft && (
                 <button
                   type="button"
-                  onClick={() => {
-                    sfx.play('potion');
-                    onNightWitch({ heal: true, poisonTargetId: null });
-                  }}
+                  onClick={() =>
+                    performOrWalkNightAction(witchVictim, () => {
+                      sfx.play('potion');
+                      onNightWitch({ heal: true, poisonTargetId: null });
+                    })
+                  }
                   className="ggd-btn bg-emerald-400 text-black px-2.5 py-1 text-xs"
                 >
-                  💚 Cứu {witchVictim.name}
+                  💚 Chạy tới Cứu {witchVictim.name}
                 </button>
               )}
               {priv?.witchPoisonLeft && witchMode === 'poison' && activeTarget && activeTarget.alive ? (
                 <button
                   type="button"
-                  onClick={() => {
-                    sfx.play('potion');
-                    onNightWitch({ heal: false, poisonTargetId: activeTarget.id });
-                    setWitchMode('idle');
-                  }}
+                  onClick={() =>
+                    performOrWalkNightAction(activeTarget, () => {
+                      sfx.play('potion');
+                      onNightWitch({ heal: false, poisonTargetId: activeTarget.id });
+                      setWitchMode('idle');
+                    })
+                  }
                   className="ggd-btn bg-purple-600 text-white px-3 py-1 text-xs"
                 >
-                  ☠️ Quăng Độc {activeTarget.name}
+                  ☠️ Chạy tới Đầu Độc {activeTarget.name}
                 </button>
               ) : (
                 priv?.witchPoisonLeft && (
@@ -943,16 +1509,49 @@ export default function VillageArena({
             </div>
           )}
 
-          {/* Passive Night / Dead / Spectator Context Pill */}
+          {/* Dead Ghost / Sleeping Villager Night Pill */}
           {isNight && !isMySoloNightTurn && (!isWolfRole(myRole) || !me?.alive) && (
-            <div className="ggd-card px-3 py-1 text-[11px] font-bold text-amber-100/85">
+            <div className="ggd-card px-3 py-1 text-[11px] font-bold text-amber-100/90">
               {!me?.alive || me?.isSpectator
-                ? '👻 Cõi Âm — Bạn có thể Voice/Chat với hồn ma khác'
-                : '🌙 Ban đêm — Chờ những vai trò thức đêm hành động...'}
+                ? '👻 Hồn Ma (Cõi Âm) — Bay tự do & xem trọn cảnh Sói đi săn ban đêm!'
+                : '😴 Bạn đang ngủ say tại chỗ (khóa di chuyển tới sáng)...'}
             </div>
           )}
         </div>
       </div>
+
+      {/* MOBILE / MULTI-TOUCH VIRTUAL JOYSTICK + JUMP / PUNCH / KICK CLUSTER */}
+      {canMoveNow && showTouchJoystick && (
+        <VirtualJoystick
+          enabled={true}
+          canMelee={canMeleeNow}
+          cooldowns={controller.cooldowns}
+          onMove={controller.setJoystick}
+          onJump={controller.triggerJump}
+          onMelee={controller.triggerMelee}
+        />
+      )}
+
+      {/* AMONG US EMERGENCY VOTE MODAL */}
+      <AmongUsVoteModal
+        open={voteModalOpen}
+        room={room}
+        me={me}
+        secondsLeft={secondsLeft}
+        speakingPeers={speakingPeers}
+        onVote={(targetId) => onDayVote(targetId)}
+        onClose={() => setVoteModalOpen(false)}
+      />
+
+      {/* ESC PAUSE & CONTROLLER SETTINGS MODAL */}
+      <PauseMenuModal
+        open={pauseOpen}
+        settings={controller.settings}
+        onChangeSettings={controller.setSettings}
+        onOpenAudioMixer={onOpenAudioMixer}
+        onLeaveRoom={onLeaveRoom}
+        onClose={() => setPauseOpen(false)}
+      />
     </div>
   );
 }

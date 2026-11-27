@@ -1,5 +1,7 @@
 import { INTERACTIONS, PHASES, VILLAGERS } from '../shared/constants.js';
-import { getAlivePlayers, isWolfRole } from './gameEngine.js';
+import { canObserverSeeMovement, getAlivePlayers, isWolfRole } from './gameEngine.js';
+import { getRingSpawnPosition } from '../src/engine/movementConfig.js';
+import { resolveWorldCollisions } from '../src/engine/physics2d.js';
 
 const BOT_NAMES = [
   'Bác Ba Phi',
@@ -40,6 +42,9 @@ export function createBotPlayer(existingPlayers, id) {
       ? availableAvatars[Math.floor(Math.random() * availableAvatars.length)]
       : VILLAGERS[Math.floor(Math.random() * VILLAGERS.length)];
 
+  const idx = existingPlayers.filter((p) => !p.isSpectator).length;
+  const spawn = getRingSpawnPosition(idx, Math.max(6, idx + 1), 0.92);
+
   return {
     id,
     socketId: null,
@@ -58,7 +63,140 @@ export function createBotPlayer(existingPlayers, id) {
     witchPoisonLeft: false,
     seerHistory: [],
     deathInfo: null,
+    x: spawn.x,
+    y: spawn.y,
+    z: 0,
+    facing: spawn.x <= 800 ? 1 : -1,
+    anim: 'idle',
+    sleepOrigin: { x: spawn.x, y: spawn.y },
+    botTarget: null,
+    botNextPickAt: 0,
   };
+}
+
+/**
+ * Điều khiển Bot AI đi dạo quanh Sân Đình ban ngày / Sảnh chờ,
+ * và hóa Sói / vai chức năng chạy tới mục tiêu vào ban đêm!
+ */
+export function stepRoomBotsTick(room, io, dt = 0.14) {
+  if (!room) return;
+  const now = Date.now();
+  const isFreeRoam = [PHASES.LOBBY, PHASES.ROLE_REVEAL, PHASES.DAY_DISCUSS].includes(room.phase);
+  const isNight = room.phase === PHASES.NIGHT;
+  if (!isFreeRoam && !isNight) return;
+
+  const bots = room.players.filter((p) => p.isBot && !p.isSpectator);
+  for (const bot of bots) {
+    let shouldWalk = false;
+    let speed = 185;
+
+    if (!bot.alive) {
+      // Bot đã chết hóa Hồn Ma bay lơ lửng quanh sân
+      shouldWalk = true;
+      speed = 165;
+    } else if (isFreeRoam) {
+      shouldWalk = true;
+      speed = room.phase === PHASES.LOBBY ? 210 : 175;
+    } else if (isNight) {
+      if (isWolfRole(bot.role)) {
+        shouldWalk = true;
+        speed = 265;
+      } else if (!room.villagePowersLost) {
+        if (
+          room.nightStage === 'EARLY' &&
+          ((bot.role === 'guard' && !room.nightActions.guardSubmitted) ||
+            (bot.role === 'cupid' && room.dayCount === 1 && room.nightActions.cupidTargets.length < 2))
+        ) {
+          shouldWalk = true;
+          speed = 230;
+        } else if (
+          room.nightStage === 'LATE' &&
+          ((bot.role === 'seer' && !room.nightActions.seerSubmitted) ||
+            (bot.role === 'witch' && !room.nightActions.witchSubmitted && (bot.witchHealLeft || bot.witchPoisonLeft)))
+        ) {
+          shouldWalk = true;
+          speed = 230;
+        }
+      }
+    }
+
+    if (!shouldWalk) {
+      if (bot.anim !== (isNight && bot.alive ? 'sleep' : 'idle')) {
+        bot.anim = isNight && bot.alive ? 'sleep' : 'idle';
+      }
+      continue;
+    }
+
+    if (!bot.botTarget || now >= (bot.botNextPickAt || 0)) {
+      if (now < (bot.botPauseUntil || 0)) {
+        if (bot.anim !== 'idle') bot.anim = 'idle';
+        continue;
+      }
+      if (!isNight && Math.random() < 0.35) {
+        bot.botPauseUntil = now + 900 + Math.random() * 1400;
+        bot.botNextPickAt = bot.botPauseUntil;
+        bot.anim = 'idle';
+        continue;
+      }
+      // Pick random point inside Sân Đình ring or near a victim during Night
+      if (isNight && bot.alive && !bot.botTarget) {
+        const candidates = room.players.filter((x) => x.id !== bot.id && x.alive && !x.isSpectator);
+        const pick = candidates.length > 0 ? candidates[Math.floor(Math.random() * candidates.length)] : null;
+        if (pick) {
+          bot.botTarget = {
+            x: (pick.sleepOrigin?.x ?? pick.x) + (Math.random() - 0.5) * 60,
+            y: (pick.sleepOrigin?.y ?? pick.y) + (Math.random() - 0.5) * 50,
+          };
+          bot.botNextPickAt = now + 2200;
+        }
+      } else {
+        const ang = Math.random() * Math.PI * 2;
+        const r = 120 + Math.random() * 340;
+        bot.botTarget = {
+          x: 800 + Math.cos(ang) * r,
+          y: 552 + Math.sin(ang) * (r * 0.56),
+        };
+        bot.botNextPickAt = now + 1800 + Math.random() * 2400;
+      }
+    }
+
+    if (!bot.botTarget) continue;
+    const dx = bot.botTarget.x - (bot.x ?? 800);
+    const dy = bot.botTarget.y - (bot.y ?? 650);
+    const dist = Math.hypot(dx, dy);
+    if (dist < 18) {
+      bot.botTarget = null;
+      bot.anim = bot.alive ? 'idle' : 'ghost';
+      bot.botPauseUntil = now + 700 + Math.random() * 1300;
+    } else {
+      const nx = dx / dist;
+      const ny = dy / dist;
+      const nextPos = resolveWorldCollisions(bot.x + nx * speed * dt, bot.y + ny * speed * dt, 22, {
+        ignoreObstacles: !bot.alive,
+      });
+      bot.x = nextPos.x;
+      bot.y = nextPos.y;
+      bot.facing = Math.abs(nx) > 0.1 ? (nx > 0 ? 1 : -1) : bot.facing || 1;
+      bot.anim = !bot.alive ? 'ghost' : speed > 240 ? 'run' : 'walk';
+    }
+
+    const wolfTransformed = isNight && bot.alive && isWolfRole(bot.role);
+    for (const viewer of room.players) {
+      if (viewer.isBot || !viewer.connected || !viewer.socketId) continue;
+      if (!canObserverSeeMovement(room, viewer, bot)) continue;
+      io.to(viewer.socketId).volatile.emit('player:moved', {
+        id: bot.id,
+        x: Math.round(bot.x),
+        y: Math.round(bot.y),
+        z: bot.alive ? 0 : 16,
+        vx: 0,
+        vy: 0,
+        facing: bot.facing,
+        anim: bot.anim,
+        wolfTransformed,
+      });
+    }
+  }
 }
 
 export function scheduleBotActions(room, handlers) {
@@ -102,12 +240,14 @@ export function scheduleBotActions(room, handlers) {
           const targets = alive.filter((p) => !isWolfRole(p.role));
           if (targets.length > 0) {
             const target = pickRandom(targets);
+            bot.botTarget = { x: target.sleepOrigin?.x ?? target.x, y: target.sleepOrigin?.y ?? target.y };
+            bot.botNextPickAt = Date.now() + 2600;
             setTimeout(() => {
               if (room.phase === PHASES.NIGHT && room.nightStage === 'EARLY') {
                 const useCurse = bot.role === 'cursed_wolf' && !room.cursedUsed && Math.random() < 0.25;
                 handlers.submitWolfVote(room, bot.id, target.id, useCurse, true);
               }
-            }, 1200 + Math.random() * 1500);
+            }, 1400 + Math.random() * 1400);
           }
         }
       }
